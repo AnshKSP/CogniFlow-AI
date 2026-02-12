@@ -11,6 +11,10 @@ from app.rag.vector_store import FAISSStore
 from app.rag.retriever import Retriever
 from app.rag.pipeline import RAGPipeline
 
+MAX_PDF_SIZE = 25 * 1024 * 1024  # 25 MB
+MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10 MB
+
+ALLOWED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg"}
 
 app = FastAPI(title="CogniFlow AI - Multi-Mode Backend")
 
@@ -39,10 +43,19 @@ def chat(request: ChatRequest):
 @app.post("/upload-pdf")
 async def upload_pdf(file: UploadFile = File(...)):
     try:
+        # Validate extension
+        if not file.filename.lower().endswith(".pdf"):
+            raise ValueError("Only PDF files are allowed.")
+
+        content = await file.read()
+
+        # Validate size
+        if len(content) > MAX_PDF_SIZE:
+            raise ValueError("PDF exceeds 25MB size limit.")
+
         file_path = os.path.join(UPLOAD_FOLDER, file.filename)
 
         with open(file_path, "wb") as f:
-            content = await file.read()
             f.write(content)
 
         rag_pipeline.index_pdf(file_path, file.filename)
@@ -51,6 +64,7 @@ async def upload_pdf(file: UploadFile = File(...)):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 from pydantic import BaseModel
 
 class RAGQueryRequest(BaseModel):
@@ -150,10 +164,19 @@ async def upload_image(
     api_key: str | None = None
 ):
     try:
+        file_extension = os.path.splitext(file.filename)[1].lower()
+
+        if file_extension not in ALLOWED_IMAGE_EXTENSIONS:
+            raise ValueError("Only PNG, JPG, and JPEG images are allowed.")
+
+        content = await file.read()
+
+        if len(content) > MAX_IMAGE_SIZE:
+            raise ValueError("Image exceeds 10MB size limit.")
+
         file_path = os.path.join(UPLOAD_FOLDER, file.filename)
 
         with open(file_path, "wb") as f:
-            content = await file.read()
             f.write(content)
 
         extracted_text = image_loader.extract_text(file_path)
