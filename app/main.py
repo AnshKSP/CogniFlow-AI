@@ -51,8 +51,10 @@ from pydantic import BaseModel
 
 class RAGQueryRequest(BaseModel):
     question: str
+    mode: str = "strict"   # "strict" or "solve"
     llm_type: str = "local"
     api_key: str | None = None
+
 
 
 @app.post("/rag-query")
@@ -60,11 +62,73 @@ def rag_query(request: RAGQueryRequest):
     try:
         llm = get_llm(request.llm_type, request.api_key)
 
-        answer, citations = rag_pipeline.query(
-            request.question,
-            retriever,
-            llm
-        )
+        # Retrieve chunks
+        if request.mode == "strict":
+            results = retriever.retrieve(request.question, top_k=4)
+        elif request.mode == "solve":
+            results = retriever.retrieve(request.question, top_k=3)
+        else:
+            raise ValueError("Invalid mode. Use 'strict' or 'solve'.")
+
+        if not results:
+            return {
+                "answer": "Information not available in the uploaded documents.",
+                "citations": []
+            }
+
+        context_blocks = []
+        citations = []
+
+        for r in results:
+            context_blocks.append(
+                f"(Source: {r['source']}, Page {r['page']})\n{r['text']}"
+            )
+            citations.append({
+                "source": r["source"],
+                "page": r["page"]
+            })
+
+        context = "\n\n".join(context_blocks)
+
+        if request.mode == "strict":
+            prompt = f"""
+You are a strict document-based assistant.
+
+Rules:
+- Answer ONLY using the provided context.
+- Do NOT use outside knowledge.
+- If the answer is not clearly present in the context, respond exactly with:
+  "Information not available in the uploaded documents."
+- Do NOT guess.
+- Do NOT fabricate details.
+
+Context:
+{context}
+
+Question:
+{request.question}
+"""
+        else:  # solve mode
+            prompt = f"""
+You are solving a problem extracted from a document.
+
+Below is the relevant content retrieved from the document:
+
+{context}
+
+Instructions:
+- Identify the problem or question.
+- Solve it step-by-step.
+- Clearly explain reasoning.
+- Base your reasoning on the retrieved content.
+- If insufficient information exists, say so.
+- Mention that the solution is derived from the document context.
+
+User Request:
+{request.question}
+"""
+
+        answer = llm.generate(prompt)
 
         return {
             "answer": answer,
@@ -73,6 +137,7 @@ def rag_query(request: RAGQueryRequest):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/clear-index")
 def clear_index():
     try:
