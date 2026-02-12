@@ -3,6 +3,8 @@ from app.schemas.chat import ChatRequest, ChatResponse
 from app.core.llm_factory import get_llm
 from fastapi import UploadFile, File
 import os
+from app.rag.image_loader import ImageLoader
+from app.rag.text_splitter import split_text
 
 from app.rag.embedder import Embedder
 from app.rag.vector_store import FAISSStore
@@ -20,6 +22,8 @@ rag_pipeline = RAGPipeline(embedder, vector_store)
 
 UPLOAD_FOLDER = "uploaded_docs"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+image_loader = ImageLoader()
+
 @app.get("/")
 def root():
     return {"status": "Server running"}
@@ -138,17 +142,101 @@ User Request:
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/upload-image")
+async def upload_image(
+    file: UploadFile = File(...),
+    mode: str = "index",   # "index" or "solve"
+    llm_type: str = "local",
+    api_key: str | None = None
+):
+    try:
+        file_path = os.path.join(UPLOAD_FOLDER, file.filename)
+
+        with open(file_path, "wb") as f:
+            content = await file.read()
+            f.write(content)
+
+        extracted_text = image_loader.extract_text(file_path)
+
+        if not extracted_text:
+            raise ValueError("No readable text found in image.")
+
+        if mode == "index":
+            chunks = split_text(extracted_text)
+            embeddings = embedder.embed(chunks)
+
+            metadata = [
+                {
+                    "text": chunk,
+                    "source": file.filename,
+                    "page": 1
+                }
+                for chunk in chunks
+            ]
+
+            vector_store.add(embeddings, metadata)
+
+            return {"message": "Image indexed successfully."}
+
+        elif mode == "solve":
+            llm = get_llm(llm_type, api_key)
+
+            prompt = f"""
+Below is text extracted from an image:
+
+{extracted_text}
+
+Instructions:
+- Identify the problem.
+- Solve it step-by-step.
+- Explain reasoning clearly.
+- Mention that the solution is derived from OCR-extracted content.
+"""
+
+            answer = llm.generate(prompt)
+
+            return {
+                "answer": answer,
+                "note": "Solution derived from OCR-extracted image text."
+            }
+
+        else:
+            raise ValueError("Invalid mode. Use 'index' or 'solve'.")
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/clear-index")
 def clear_index():
     try:
         vector_store.reset()
-        return {"message": "RAG index cleared successfully."}
+        return {
+            "message": "RAG index cleared successfully.",
+            "total_documents": 0,
+            "total_chunks": 0
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/list-documents")
 def list_documents():
     try:
-        docs = list({item["source"] for item in vector_store.metadata})
-        return {"documents": docs}
+        sources = list({item["source"] for item in vector_store.metadata})
+        return {
+            "documents": sources,
+            "total_documents": len(sources),
+            "total_chunks": len(vector_store.metadata)
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+@app.get("/index-stats")
+def index_stats():
+    try:
+        return {
+            "total_chunks": len(vector_store.metadata),
+            "unique_documents": len({item["source"] for item in vector_store.metadata})
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
