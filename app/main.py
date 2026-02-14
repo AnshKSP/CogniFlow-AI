@@ -1,4 +1,6 @@
 from fastapi import FastAPI, HTTPException
+from app.recommendation.engine import RecommendationEngine
+
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.core.llm_factory import get_llm
 from fastapi import UploadFile, File
@@ -10,6 +12,12 @@ from app.rag.embedder import Embedder
 from app.rag.vector_store import FAISSStore
 from app.rag.retriever import Retriever
 from app.rag.pipeline import RAGPipeline
+
+from app.database.database import engine, SessionLocal
+from app.database import models
+from app.database.models import UploadedDocument
+
+models.Base.metadata.create_all(bind=engine)
 
 MAX_PDF_SIZE = 25 * 1024 * 1024  # 25 MB
 MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10 MB
@@ -59,6 +67,20 @@ async def upload_pdf(file: UploadFile = File(...)):
             f.write(content)
 
         rag_pipeline.index_pdf(file_path, file.filename)
+
+        from app.database.database import SessionLocal
+        from app.database.models import UploadedDocument
+
+        db = SessionLocal()
+
+        new_doc = UploadedDocument(
+            filename=file.filename,
+            file_type="pdf"
+        )
+
+        db.add(new_doc)
+        db.commit()
+        db.close()
 
         return {"message": f"{file.filename} indexed successfully."}
 
@@ -185,6 +207,17 @@ async def upload_image(
             raise ValueError("No readable text found in image.")
 
         if mode == "index":
+
+            db = SessionLocal()
+
+            new_doc = UploadedDocument(
+                filename=file.filename,
+                file_type="image"
+            )
+            db.add(new_doc)
+            db.commit()
+            db.close()
+
             chunks = split_text(extracted_text)
             embeddings = embedder.embed(chunks)
 
@@ -262,4 +295,46 @@ def index_stats():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+recommendation_engine = RecommendationEngine()
+class RecommendationRequest(BaseModel):
+    dominant_genre: str | None = None
+    mood: str | None = None
+    intensity: str | None = None
+    energy_level: str | None = None
+    industry_preference: str | None = None
+
+
+@app.post("/recommend")
+def recommend_movies(request: RecommendationRequest):
+    try:
+        results = recommendation_engine.recommend(
+            dominant_genre=request.dominant_genre,
+            mood=request.mood,
+            intensity=request.intensity,
+            energy_level=request.energy_level,
+            industry_preference=request.industry_preference
+        )
+        from app.database.models import RecommendationHistory
+        import json
+
+        db = SessionLocal()
+
+        history_entry = RecommendationHistory(
+            request_summary=json.dumps(request.dict()),
+            results=json.dumps(results)
+        )
+
+        db.add(history_entry)
+        db.commit()
+        db.close()
+
+        return {
+            "recommendations": results,
+            "total_returned": len(results)
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
