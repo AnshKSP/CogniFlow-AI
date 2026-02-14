@@ -1,0 +1,173 @@
+[
+  {
+    "title": "Inception",
+    "year": 2010,
+    "industry": "Hollywood",
+    "genres": ["sci-fi", "thriller"],
+    "mood_tags": ["intense", "dark", "suspenseful"],
+    "intensity": "high",
+    "energy_level": "high"
+  },
+  {
+    "title": "The Grand Budapest Hotel",
+    "year": 2014,
+    "industry": "Hollywood",
+    "genres": ["comedy", "drama"],
+    "mood_tags": ["light", "quirky", "humorous"],
+    "intensity": "low",
+    "energy_level": "medium"
+  },
+  {
+    "title": "Se7en",
+    "year": 1995,
+    "industry": "Hollywood",
+    "genres": ["thriller", "crime"],
+    "mood_tags": ["dark", "intense", "suspenseful"],
+    "intensity": "high",
+    "energy_level": "medium"
+  },
+  {
+    "title": "La La Land",
+    "year": 2016,
+    "industry": "Hollywood",
+    "genres": ["romance", "drama"],
+    "mood_tags": ["romantic", "emotional", "inspiring"],
+    "intensity": "medium",
+    "energy_level": "medium"
+  },
+  {
+    "title": "The Shawshank Redemption",
+    "year": 1994,
+    "industry": "Hollywood",
+    "genres": ["drama"],
+    "mood_tags": ["inspiring", "emotional"],
+    "intensity": "medium",
+    "energy_level": "low"
+  },
+  {
+    "title": "Parasite",
+    "year": 2019,
+    "industry": "International",
+    "genres": ["thriller", "drama"],
+    "mood_tags": ["dark", "suspenseful", "intense"],
+    "intensity": "high",
+    "energy_level": "medium"
+  },
+  {
+    "title": "Spirited Away",
+    "year": 2001,
+    "industry": "International",
+    "genres": ["animation", "fantasy"],
+    "mood_tags": ["inspiring", "emotional", "quirky"],
+    "intensity": "medium",
+    "energy_level": "medium"
+  },
+  {
+    "title": "Amélie",
+    "year": 2001,
+    "industry": "International",
+    "genres": ["romance", "comedy"],
+    "mood_tags": ["light", "quirky", "romantic"],
+    "intensity": "low",
+    "energy_level": "medium"
+  },
+  {
+    "title": "3 Idiots",
+    "year": 2009,
+    "industry": "Bollywood",
+    "genres": ["comedy", "drama"],
+    "mood_tags": ["uplifting", "emotional", "motivational"],
+    "intensity": "medium",
+    "energy_level": "medium"
+  },
+  {
+    "title": "Andhadhun",
+    "year": 2018,
+    "industry": "Bollywood",
+    "genres": ["thriller", "crime"],
+    "mood_tags": ["dark", "suspenseful", "quirky"],
+    "intensity": "high",
+    "energy_level": "high"
+  },
+  {
+    "title": "Zindagi Na Milegi Dobara",
+    "year": 2011,
+    "industry": "Bollywood",
+    "genres": ["drama", "adventure"],
+    "mood_tags": ["uplifting", "inspiring", "light"],
+    "intensity": "medium",
+    "energy_level": "medium"
+  },
+  {
+    "title": "Taare Zameen Par",
+    "year": 2007,
+    "industry": "Bollywood",
+    "genres": ["drama", "family"],
+    "mood_tags": ["emotional", "inspiring"],
+    "intensity": "low",
+    "energy_level": "low"
+  },
+  {
+    "title": "The Dark Knight",
+    "year": 2008,
+    "industry": "Hollywood",
+    "genres": ["action", "crime"],
+    "mood_tags": ["dark", "intense"],
+    "intensity": "high",
+    "energy_level": "high"
+  },
+  {
+    "title": "Interstellar",
+    "year": 2014,
+    "industry": "Hollywood",
+    "genres": ["sci-fi", "drama"],
+    "mood_tags": ["emotional", "intense", "inspiring"],
+    "intensity": "high",
+    "energy_level": "medium"
+  },
+  {
+    "title": "The Pursuit of Happyness",
+    "year": 2006,
+    "industry": "Hollywood",
+    "genres": ["drama", "biography"],
+    "mood_tags": ["inspiring", "emotional"],
+    "intensity": "medium",
+    "energy_level": "low"
+  },
+  {
+    "title": "Get Out",
+    "year": 2017,
+    "industry": "Hollywood",
+    "genres": ["horror", "thriller"],
+    "mood_tags": ["dark", "suspenseful"],
+    "intensity": "high",
+    "energy_level": "medium"
+  },
+  {
+    "title": "Dangal",
+    "year": 2016,
+    "industry": "Bollywood",
+    "genres": ["drama", "biography"],
+    "mood_tags": ["inspiring", "emotional"],
+    "intensity": "medium",
+    "energy_level": "medium"
+  },
+  {
+    "title": "Queen",
+    "year": 2014,
+    "industry": "Bollywood",
+    "genres": ["comedy", "drama"],
+    "mood_tags": ["uplifting", "light"],
+    "intensity": "low",
+    "energy_level": "medium"
+  },
+  {
+    "title": "Oldboy",
+    "year": 2003,
+    "industry": "International",
+    "genres": ["thriller", "crime"],
+    "mood_tags": ["dark", "intense"],
+    "intensity": "high",
+    "energy_level": "high"
+  }
+]
