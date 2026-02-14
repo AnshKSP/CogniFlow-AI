@@ -22,3 +22,11 @@ Thumbs.db
 # Logs
 *.log
 uploaded_docs/
+
+# Runtime folders
+uploaded_videos/
+video_downloads/
+extracted_audio/
+
+# Database
+cogniflow.db
