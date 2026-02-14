@@ -17,6 +17,10 @@ from app.database.database import engine, SessionLocal
 from app.database import models
 from app.database.models import UploadedDocument
 
+from app.video.pipeline import VideoPipeline
+video_pipeline = VideoPipeline()
+
+
 models.Base.metadata.create_all(bind=engine)
 
 MAX_PDF_SIZE = 25 * 1024 * 1024  # 25 MB
@@ -337,4 +341,41 @@ def recommend_movies(request: RecommendationRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+from fastapi import UploadFile, File
+
+@app.post("/video/upload")
+async def upload_video(file: UploadFile = File(...)):
+    try:
+        video_folder = "uploaded_videos"
+        os.makedirs(video_folder, exist_ok=True)
+
+        file_path = os.path.join(video_folder, file.filename)
+
+        content = await file.read()
+        with open(file_path, "wb") as f:
+            f.write(content)
+
+        audio_path = video_pipeline.process_uploaded_video(file_path)
+
+        return {
+            "message": "Audio extracted successfully.",
+            "audio_path": audio_path
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/video/youtube")
+def youtube_video(url: str):
+    try:
+        audio_path = video_pipeline.process_youtube(url)
+
+        return {
+            "message": "YouTube audio processed successfully.",
+            "audio_path": audio_path
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
