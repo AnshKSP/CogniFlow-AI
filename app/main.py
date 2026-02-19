@@ -343,6 +343,8 @@ def recommend_movies(request: RecommendationRequest):
 
 from fastapi import UploadFile, File
 
+from fastapi import UploadFile, File
+
 @app.post("/video/upload")
 async def upload_video(file: UploadFile = File(...)):
     try:
@@ -355,11 +357,12 @@ async def upload_video(file: UploadFile = File(...)):
         with open(file_path, "wb") as f:
             f.write(content)
 
-        audio_path = video_pipeline.process_uploaded_video(file_path)
+        transcript = video_pipeline.process_uploaded_video(file_path)
 
         return {
-            "message": "Audio extracted successfully.",
-            "audio_path": audio_path
+            "message": "Video processed successfully.",
+            "language_detected": transcript["language"],
+            "transcript_preview": transcript["full_text"][:500]
         }
 
     except Exception as e:
@@ -369,11 +372,12 @@ async def upload_video(file: UploadFile = File(...)):
 @app.post("/video/youtube")
 def youtube_video(url: str):
     try:
-        audio_path = video_pipeline.process_youtube(url)
+        transcript = video_pipeline.process_youtube(url)
 
         return {
-            "message": "YouTube audio processed successfully.",
-            "audio_path": audio_path
+            "message": "YouTube video processed successfully.",
+            "language_detected": transcript["language"],
+            "transcript_preview": transcript["full_text"][:500]
         }
 
     except Exception as e:
