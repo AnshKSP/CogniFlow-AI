@@ -11,3 +11,4 @@ python-multipart
 easyocr
 opencv-python
 Pillow
+indic-transliteration
