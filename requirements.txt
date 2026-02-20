@@ -5,6 +5,8 @@ python-dotenv
 pydantic
 pypdf
 sentence-transformers
+transformers
+torch
 faiss-cpu
 numpy
 python-multipart
@@ -12,3 +14,10 @@ easyocr
 opencv-python
 Pillow
 indic-transliteration
+librosa
+scikit-learn
+soundfile
+faster-whisper
+yt-dlp
+reportlab
+PyPDF2

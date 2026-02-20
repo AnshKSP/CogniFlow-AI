@@ -27,6 +27,7 @@ uploaded_docs/
 uploaded_videos/
 video_downloads/
 extracted_audio/
+uploaded_scripts/
 
 # Database
 cogniflow.db

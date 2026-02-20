@@ -1,9 +1,9 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Body
 from app.recommendation.engine import RecommendationEngine
 
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.core.llm_factory import get_llm
-from fastapi import UploadFile, File
+from fastapi import UploadFile, File, HTTPException
 import os
 from app.rag.image_loader import ImageLoader
 from app.rag.text_splitter import split_text
@@ -18,7 +18,16 @@ from app.database import models
 from app.database.models import UploadedDocument
 
 from app.video.pipeline import VideoPipeline
+from app.video.script_analyzer import ScriptAnalyzer
+from app.script.pdf_loader import PDFLoader
+from app.script.report_generator import ReportGenerator
+from app.script.script_pipeline import ScriptPipeline
+from fastapi.responses import Response, StreamingResponse
 video_pipeline = VideoPipeline()
+script_analyzer = ScriptAnalyzer()
+pdf_loader = PDFLoader()
+report_generator = ReportGenerator()
+script_pipeline = ScriptPipeline()
 
 
 models.Base.metadata.create_all(bind=engine)
@@ -341,45 +350,257 @@ def recommend_movies(request: RecommendationRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-from fastapi import UploadFile, File
-
-from fastapi import UploadFile, File
+from fastapi import UploadFile, File, HTTPException
+import os
 
 @app.post("/video/upload")
 async def upload_video(file: UploadFile = File(...)):
-    try:
-        video_folder = "uploaded_videos"
-        os.makedirs(video_folder, exist_ok=True)
+    folder = "uploaded_videos"
+    os.makedirs(folder, exist_ok=True)
+    path = os.path.join(folder, file.filename)
 
-        file_path = os.path.join(video_folder, file.filename)
+    content = await file.read()
+    with open(path, "wb") as f:
+        f.write(content)
 
-        content = await file.read()
-        with open(file_path, "wb") as f:
-            f.write(content)
+    result = video_pipeline.process_uploaded_video(path)
 
-        transcript = video_pipeline.process_uploaded_video(file_path)
-
-        return {
-            "message": "Video processed successfully.",
-            "language_detected": transcript["language"],
-            "transcript_preview": transcript["full_text"][:500]
+    return {
+        "language_detected": result["transcript"]["language"],
+        "confidence": result["transcript"].get("confidence", None),
+        "transcript_preview": result["transcript"]["full_text"][:500],
+        "audio_emotion": {
+            "dominant_mood": result["audio_emotion"]["dominant_mood"],
+            "emotional_arc": result["audio_emotion"]["emotional_arc"]
+        },
+        "script_emotion": {
+            "dominant_mood": result["script_emotion"]["dominant_mood"],
+            "emotional_arc": result["script_emotion"]["emotional_arc"]
         }
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    }
 
 
 @app.post("/video/youtube")
 def youtube_video(url: str):
-    try:
-        transcript = video_pipeline.process_youtube(url)
 
-        return {
-            "message": "YouTube video processed successfully.",
-            "language_detected": transcript["language"],
-            "transcript_preview": transcript["full_text"][:500]
+    result = video_pipeline.process_youtube(url)
+
+    return {
+        "language_detected": result["transcript"]["language"],
+        "confidence": result["transcript"].get("confidence", None),
+        "transcript_preview": result["transcript"]["full_text"][:500],
+        "audio_emotion": {
+            "dominant_mood": result["audio_emotion"]["dominant_mood"],
+            "emotional_arc": result["audio_emotion"]["emotional_arc"]
+        },
+        "script_emotion": {
+            "dominant_mood": result["script_emotion"]["dominant_mood"],
+            "emotional_arc": result["script_emotion"]["emotional_arc"]
         }
+    }
 
+
+class ScriptAnalyzeRequest(BaseModel):
+    text: str
+
+
+@app.post("/script/analyze")
+def analyze_script(request: ScriptAnalyzeRequest):
+    """
+    Standalone script emotion analysis endpoint with sentence-level timeline.
+    Analyzes text emotion without requiring video processing.
+    """
+    try:
+        if not request.text or not isinstance(request.text, str):
+            raise ValueError("Text is required and must be a string")
+        
+        # Analyze script emotion with timeline using ScriptPipeline
+        result = script_pipeline.analyze_with_timeline(request.text)
+        emotion_label = result.get("emotion_label", "neutral")
+        confidence = result.get("confidence", 0.0)
+        emotional_arc = result.get("emotional_arc", [])
+        
+        # Map emotion_label to dominant_mood using existing mapping
+        emotion_to_mood = {
+            "sadness": "dark",
+            "anger": "intense",
+            "joy": "energetic",
+            "fear": "dramatic",
+            "surprise": "dramatic",
+            "disgust": "dark",
+            "neutral": "calm"
+        }
+        
+        dominant_mood = emotion_to_mood.get(emotion_label.lower(), "calm")
+        
+        # Generate emotion summary
+        emotion_summary = f"The script expresses {emotion_label} with {confidence*100:.1f}% confidence."
+        
+        return {
+            "emotion_label": emotion_label,
+            "dominant_mood": dominant_mood,
+            "confidence": confidence,
+            "emotional_arc": emotional_arc,
+            "emotion_summary": emotion_summary
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@app.post("/script/upload-pdf")
+async def upload_script_pdf(file: UploadFile = File(...)):
+    """
+    Upload PDF script and analyze emotion.
+    Extracts text from PDF and performs emotion analysis.
+    """
+    try:
+        # Validate extension
+        if not file.filename.lower().endswith(".pdf"):
+            raise ValueError("Only PDF files are allowed.")
+        
+        # Save uploaded file temporarily
+        upload_folder = "uploaded_scripts"
+        os.makedirs(upload_folder, exist_ok=True)
+        file_path = os.path.join(upload_folder, file.filename)
+        
+        content = await file.read()
+        
+        # Validate size (25 MB limit)
+        if len(content) > MAX_PDF_SIZE:
+            raise ValueError("PDF exceeds 25MB size limit.")
+        
+        with open(file_path, "wb") as f:
+            f.write(content)
+        
+        # Extract text from PDF
+        extracted_text = pdf_loader.extract_text(file_path)
+        
+        if not extracted_text:
+            raise ValueError("No text content found in PDF.")
+        
+        # Analyze script emotion with timeline
+        result = script_pipeline.analyze_with_timeline(extracted_text)
+        emotion_label = result.get("emotion_label", "neutral")
+        confidence = result.get("confidence", 0.0)
+        emotional_arc = result.get("emotional_arc", [])
+        
+        # Map emotion_label to dominant_mood
+        emotion_to_mood = {
+            "sadness": "dark",
+            "anger": "intense",
+            "joy": "energetic",
+            "fear": "dramatic",
+            "surprise": "dramatic",
+            "disgust": "dark",
+            "neutral": "calm"
+        }
+        
+        dominant_mood = emotion_to_mood.get(emotion_label.lower(), "calm")
+        
+        # Generate emotion summary
+        emotion_summary = f"The script expresses {emotion_label} with {confidence*100:.1f}% confidence."
+        
+        return {
+            "emotion_label": emotion_label,
+            "dominant_mood": dominant_mood,
+            "confidence": confidence,
+            "emotional_arc": emotional_arc,
+            "emotion_summary": emotion_summary,
+            "script_preview": extracted_text[:500]  # Preview of extracted text
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/script/upload-pdf-report")
+async def upload_pdf_report(file: UploadFile = File(...)):
+    """
+    Upload a PDF and directly return a downloadable emotion report PDF.
+    """
+    try:
+        # Validate extension
+        if not file.filename or not file.filename.lower().endswith(".pdf"):
+            raise ValueError("Only PDF files are allowed.")
+
+        # Save uploaded file temporarily
+        upload_folder = "uploaded_scripts"
+        os.makedirs(upload_folder, exist_ok=True)
+        file_path = os.path.join(upload_folder, file.filename)
+
+        content = await file.read()
+
+        # Validate size (25 MB limit)
+        if len(content) > MAX_PDF_SIZE:
+            raise ValueError("PDF exceeds 25MB size limit.")
+
+        with open(file_path, "wb") as f:
+            f.write(content)
+
+        # Extract text from PDF
+        text = pdf_loader.extract_text(file_path)
+        if not text:
+            raise ValueError("No text content found in PDF.")
+
+        # Run script analysis with timeline
+        result = script_pipeline.analyze_with_timeline(text)
+        emotion_label = result.get("emotion_label", "neutral")
+        confidence = result.get("confidence", 0.0)
+        emotional_arc = result.get("emotional_arc", [])
+
+        # Generate PDF report
+        pdf_buffer = report_generator.generate_report(
+            script_preview=text,
+            emotion_label=emotion_label,
+            confidence=confidence,
+            emotional_arc=emotional_arc,
+            intensity_level=None
+        )
+
+        return StreamingResponse(
+            pdf_buffer,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": "attachment; filename=pdf_emotion_report.pdf"
+            }
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/script/generate-report")
+async def generate_script_report(data: dict = Body(...)):
+    """
+    Generate downloadable PDF emotion analysis report.
+    """
+    try:
+        # Extract text from request body
+        text = data.get("text")
+
+        if not text or not isinstance(text, str):
+            return {"error": "Text is required"}
+
+        # Run script analysis with timeline using ScriptPipeline
+        result = script_pipeline.analyze_with_timeline(text)
+        emotion_label = result.get("emotion_label", "neutral")
+        confidence = result.get("confidence", 0.0)
+        emotional_arc = result.get("emotional_arc", [])
+
+        # Generate PDF report
+        pdf_buffer = report_generator.generate_report(
+            script_preview=text,
+            emotion_label=emotion_label,
+            confidence=confidence,
+            emotional_arc=emotional_arc,
+            intensity_level=None
+        )
+        
+        # Return PDF as downloadable file
+        return StreamingResponse(
+            pdf_buffer,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": "attachment; filename=emotion_report.pdf"
+            }
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
