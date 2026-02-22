@@ -1,4 +1,6 @@
 import { ArrowUpRight, ArrowDownRight, MessageSquare, FileText, Video, BrainCircuit } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { getDashboardMetrics, getIndexStats, getMetricsEventName } from '../services/api'
 
 interface KPICardProps {
   title: string
@@ -33,37 +35,79 @@ function KPICard({ title, value, change, trend, icon, color }: KPICardProps) {
 }
 
 export default function KPICards() {
+  const [loading, setLoading] = useState(true)
+  const [documentsAnalyzed, setDocumentsAnalyzed] = useState(0)
+  const [conversationCount, setConversationCount] = useState(0)
+  const [videosProcessed, setVideosProcessed] = useState(0)
+  const [aiAccuracy, setAiAccuracy] = useState(0)
+
+  const loadMetrics = async () => {
+    try {
+      const [indexStats] = await Promise.all([getIndexStats()])
+      setDocumentsAnalyzed(indexStats.unique_documents)
+    } catch {
+      setDocumentsAnalyzed(0)
+    }
+
+    const localMetrics = getDashboardMetrics()
+    setConversationCount(localMetrics.totalConversations)
+    setVideosProcessed(localMetrics.videosProcessed)
+    setAiAccuracy(localMetrics.aiAccuracyScore)
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    void loadMetrics()
+
+    const eventName = getMetricsEventName()
+    const handler = () => {
+      void loadMetrics()
+    }
+    window.addEventListener(eventName, handler)
+    return () => window.removeEventListener(eventName, handler)
+  }, [])
+
+  const accuracyLabel = useMemo(() => {
+    if (!aiAccuracy) return 'N/A'
+    return `${aiAccuracy.toFixed(1)}%`
+  }, [aiAccuracy])
+
+  const cardValue = (value: number) => {
+    if (loading) return '...'
+    return value.toLocaleString()
+  }
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
       <KPICard
         title="Total Conversations"
-        value="12,847"
-        change="+23.5%"
+        value={cardValue(conversationCount)}
+        change={loading ? 'Updating' : '+ live'}
         trend="up"
         icon={<MessageSquare className="w-6 h-6 text-white" />}
         color="bg-gradient-to-br from-blue-500 to-blue-600"
       />
       <KPICard
         title="Documents Analyzed"
-        value="3,429"
-        change="+12.3%"
+        value={cardValue(documentsAnalyzed)}
+        change={loading ? 'Updating' : '+ indexed'}
         trend="up"
         icon={<FileText className="w-6 h-6 text-white" />}
         color="bg-gradient-to-br from-purple-500 to-purple-600"
       />
       <KPICard
         title="Videos Processed"
-        value="1,284"
-        change="+8.7%"
+        value={cardValue(videosProcessed)}
+        change={loading ? 'Updating' : '+ analyzed'}
         trend="up"
         icon={<Video className="w-6 h-6 text-white" />}
         color="bg-gradient-to-br from-cyan-500 to-cyan-600"
       />
       <KPICard
         title="AI Accuracy Score"
-        value="94.7%"
-        change="-2.1%"
-        trend="down"
+        value={loading ? '...' : accuracyLabel}
+        change={loading ? 'Updating' : '+ running avg'}
+        trend="up"
         icon={<BrainCircuit className="w-6 h-6 text-white" />}
         color="bg-gradient-to-br from-emerald-500 to-emerald-600"
       />

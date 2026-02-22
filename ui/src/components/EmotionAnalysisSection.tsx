@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Video, FileText, FileText as FilePdf, TrendingUp, BarChart3, Sparkles, FileDown } from 'lucide-react'
+import { Video, FileText, FileText as FilePdf, TrendingUp, BarChart3, Sparkles, FileDown, Link2 } from 'lucide-react'
 import { emotionApi } from '../services/api'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
@@ -21,8 +21,9 @@ interface AnalysisResult {
 }
 
 export default function EmotionAnalysisSection({ fullHeight = false }: EmotionAnalysisSectionProps) {
-  const [selectedType, setSelectedType] = useState<'video' | 'script' | 'pdf' | null>(null)
+  const [selectedType, setSelectedType] = useState<'video' | 'script' | 'pdf' | 'youtube' | null>(null)
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
+  const [youtubeUrl, setYoutubeUrl] = useState('')
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [result, setResult] = useState<AnalysisResult | null>(null)
 
@@ -36,11 +37,24 @@ export default function EmotionAnalysisSection({ fullHeight = false }: EmotionAn
   }
 
   const handleAnalyze = async () => {
-    if (!uploadedFile || !selectedType) return
+    if (!selectedType) return
 
     setIsAnalyzing(true)
     try {
-      const analysisResult = await emotionApi.analyze(uploadedFile, selectedType)
+      let analysisResult: AnalysisResult
+
+      if (selectedType === 'youtube') {
+        if (!youtubeUrl.trim()) {
+          throw new Error('Please enter a YouTube URL.')
+        }
+        analysisResult = await emotionApi.analyzeYouTube(youtubeUrl.trim())
+      } else {
+        if (!uploadedFile) {
+          throw new Error('Please upload a file first.')
+        }
+        analysisResult = await emotionApi.analyze(uploadedFile, selectedType)
+      }
+
       setResult(analysisResult)
     } catch (error) {
       console.error('Analysis failed:', error)
@@ -263,7 +277,7 @@ export default function EmotionAnalysisSection({ fullHeight = false }: EmotionAn
           Upload Content for Analysis
         </h3>
         
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {/* Video Upload */}
           <label className={`relative group cursor-pointer ${
             selectedType === 'video' ? 'ring-2 ring-blue-500' : ''
@@ -314,7 +328,54 @@ export default function EmotionAnalysisSection({ fullHeight = false }: EmotionAn
               <p className="text-xs text-blue-300/50">PDF Documents</p>
             </div>
           </label>
+
+          {/* YouTube URL */}
+          <button
+            onClick={() => {
+              setSelectedType('youtube')
+              setUploadedFile(null)
+              setResult(null)
+            }}
+            className={`relative group cursor-pointer ${
+              selectedType === 'youtube' ? 'ring-2 ring-blue-500' : ''
+            }`}
+          >
+            <div className="border-2 border-dashed border-blue-500/30 rounded-xl p-6 text-center hover:border-blue-500/60 hover:bg-slate-800/40 transition-all group-hover:scale-[1.02] w-full">
+              <Link2 className="w-10 h-10 text-emerald-400 mx-auto mb-3" />
+              <p className="text-sm font-medium text-white mb-1">YouTube</p>
+              <p className="text-xs text-blue-300/50">Paste Video Link</p>
+            </div>
+          </button>
         </div>
+
+        {selectedType === 'youtube' && (
+          <div className="mt-4 p-4 bg-slate-800/40 rounded-xl border border-blue-900/30 flex flex-col md:flex-row gap-3 md:items-center">
+            <input
+              type="url"
+              value={youtubeUrl}
+              onChange={(e) => setYoutubeUrl(e.target.value)}
+              placeholder="https://www.youtube.com/watch?v=..."
+              className="flex-1 px-4 py-2 bg-slate-800/80 border border-blue-900/30 rounded-lg text-sm text-white placeholder-blue-400/40 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20"
+            />
+            <button
+              onClick={handleAnalyze}
+              disabled={isAnalyzing || !youtubeUrl.trim()}
+              className="px-6 py-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 disabled:opacity-50 text-white font-medium rounded-lg transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-2"
+            >
+              {isAnalyzing ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Analyzing...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4" />
+                  Analyze Link
+                </>
+              )}
+            </button>
+          </div>
+        )}
 
         {uploadedFile && (
           <div className="mt-4 flex items-center justify-between p-4 bg-slate-800/40 rounded-xl border border-blue-900/30">

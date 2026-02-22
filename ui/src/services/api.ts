@@ -11,6 +11,10 @@ export const apiClient = axios.create({
   baseURL: API_BASE_URL || 'http://127.0.0.1:8000'
 })
 
+const METRICS_KEY = 'cogniflow_metrics'
+const METRICS_EVENT = 'cogniflow-metrics-updated'
+const AUTH_TOKEN_KEY = 'cogniflow_auth_token'
+
 export type ChatMode = 'general' | 'pdf'
 export type ResponseMode = 'strict' | 'solve'
 export type ChatProvider = 'local' | 'external'
@@ -53,6 +57,35 @@ export interface PdfAnalysisResponse extends ScriptAnalysisResponse {
   script_preview?: string
 }
 
+export interface DashboardMetrics {
+  totalConversations: number
+  videosProcessed: number
+  aiAccuracyScore: number
+}
+
+export interface AuthUser {
+  full_name: string
+  email: string
+}
+
+export interface AuthResponse {
+  token: string
+  full_name: string
+  email: string
+}
+
+interface BackendIndexStats {
+  total_chunks: number
+  unique_documents: number
+}
+
+interface StoredMetrics {
+  totalConversations: number
+  videosProcessed: number
+  analyzedCount: number
+  analyzedConfidenceSum: number
+}
+
 interface BackendChatRequest {
   message: string
   llm_type: 'local' | 'api'
@@ -64,6 +97,107 @@ interface BackendRagRequest {
   mode: ResponseMode
   llm_type: 'local' | 'api'
   api_key?: string
+}
+
+const readMetrics = (): StoredMetrics => {
+  try {
+    const raw = localStorage.getItem(METRICS_KEY)
+    if (!raw) {
+      return {
+        totalConversations: 0,
+        videosProcessed: 0,
+        analyzedCount: 0,
+        analyzedConfidenceSum: 0
+      }
+    }
+    return JSON.parse(raw) as StoredMetrics
+  } catch {
+    return {
+      totalConversations: 0,
+      videosProcessed: 0,
+      analyzedCount: 0,
+      analyzedConfidenceSum: 0
+    }
+  }
+}
+
+const writeMetrics = (next: StoredMetrics) => {
+  localStorage.setItem(METRICS_KEY, JSON.stringify(next))
+  window.dispatchEvent(new Event(METRICS_EVENT))
+}
+
+const incrementConversation = () => {
+  const metrics = readMetrics()
+  metrics.totalConversations += 1
+  writeMetrics(metrics)
+}
+
+const incrementVideos = () => {
+  const metrics = readMetrics()
+  metrics.videosProcessed += 1
+  writeMetrics(metrics)
+}
+
+const addAnalysisConfidence = (confidencePercent: number) => {
+  const metrics = readMetrics()
+  metrics.analyzedCount += 1
+  metrics.analyzedConfidenceSum += confidencePercent
+  writeMetrics(metrics)
+}
+
+export const getDashboardMetrics = (): DashboardMetrics => {
+  const metrics = readMetrics()
+  const aiAccuracyScore = metrics.analyzedCount
+    ? metrics.analyzedConfidenceSum / metrics.analyzedCount
+    : 0
+
+  return {
+    totalConversations: metrics.totalConversations,
+    videosProcessed: metrics.videosProcessed,
+    aiAccuracyScore
+  }
+}
+
+export const getMetricsEventName = () => METRICS_EVENT
+
+export const getAuthToken = () => localStorage.getItem(AUTH_TOKEN_KEY) || ''
+
+export const setAuthToken = (token: string) => {
+  if (!token) return
+  localStorage.setItem(AUTH_TOKEN_KEY, token)
+}
+
+export const clearAuthToken = () => {
+  localStorage.removeItem(AUTH_TOKEN_KEY)
+}
+
+const authHeaders = () => {
+  const token = getAuthToken()
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
+export const getIndexStats = async (): Promise<BackendIndexStats> => {
+  const { data } = await apiClient.get<BackendIndexStats>('/index-stats')
+  return data
+}
+
+export const signup = async (full_name: string, email: string, password: string): Promise<AuthResponse> => {
+  const { data } = await apiClient.post<AuthResponse>('/auth/signup', { full_name, email, password })
+  return data
+}
+
+export const login = async (email: string, password: string): Promise<AuthResponse> => {
+  const { data } = await apiClient.post<AuthResponse>('/auth/login', { email, password })
+  return data
+}
+
+export const getCurrentUser = async (): Promise<AuthUser> => {
+  const { data } = await apiClient.get<AuthUser>('/auth/me', { headers: authHeaders() })
+  return data
+}
+
+export const logout = async (): Promise<void> => {
+  await apiClient.post('/auth/logout', {}, { headers: authHeaders() })
 }
 
 const mapAudioArcToIntensitySeries = (
@@ -97,6 +231,12 @@ export const uploadVideo = async (file: File) => {
     headers: { 'Content-Type': 'multipart/form-data' }
   })
 
+  return data
+}
+
+export const analyzeYouTubeVideo = async (url: string): Promise<VideoUploadResponse> => {
+  const encoded = encodeURIComponent(url)
+  const { data } = await apiClient.post<VideoUploadResponse>(`/video/youtube?url=${encoded}`)
   return data
 }
 
@@ -138,6 +278,7 @@ export const sendChat = async (payload: ChatPayload): Promise<ChatResponse> => {
     }
 
     const { data } = await apiClient.post<{ answer: string }>('/rag-query', ragRequest)
+    incrementConversation()
     return { response: data.answer }
   }
 
@@ -148,6 +289,7 @@ export const sendChat = async (payload: ChatPayload): Promise<ChatResponse> => {
   }
 
   const { data } = await apiClient.post<ChatResponse>('/chat', chatRequest)
+  incrementConversation()
   return data
 }
 
@@ -209,6 +351,8 @@ export const emotionApi = {
     if (type === 'video') {
       const data = await uploadVideo(file)
       const confidence = Math.round((data.confidence ?? 0) * 100)
+      incrementVideos()
+      addAnalysisConfidence(confidence)
 
       return {
         dominantMood: data.audio_emotion.dominant_mood,
@@ -222,6 +366,7 @@ export const emotionApi = {
     if (type === 'pdf') {
       const data = await uploadPDF(file)
       const confidence = Math.round(data.confidence * 100)
+      addAnalysisConfidence(confidence)
 
       return {
         dominantMood: data.dominant_mood,
@@ -239,6 +384,7 @@ export const emotionApi = {
 
     const data = await analyzeScript(scriptText)
     const confidence = Math.round(data.confidence * 100)
+    addAnalysisConfidence(confidence)
 
     return {
       dominantMood: data.dominant_mood,
@@ -246,6 +392,21 @@ export const emotionApi = {
       confidence,
       emotionalArc: data.emotional_arc.map((point) => Math.round((point.confidence ?? 0) * 100)),
       emotions: buildEmotionBreakdown(data.dominant_mood, confidence)
+    }
+  }
+  ,
+  async analyzeYouTube(url: string) {
+    const data = await analyzeYouTubeVideo(url)
+    const confidence = Math.round((data.confidence ?? 0) * 100)
+    incrementVideos()
+    addAnalysisConfidence(confidence)
+
+    return {
+      dominantMood: data.audio_emotion.dominant_mood,
+      intensity: inferIntensity(confidence),
+      confidence,
+      emotionalArc: mapAudioArcToIntensitySeries(data.audio_emotion.emotional_arc),
+      emotions: buildEmotionBreakdown(data.audio_emotion.dominant_mood, confidence)
     }
   }
 }
