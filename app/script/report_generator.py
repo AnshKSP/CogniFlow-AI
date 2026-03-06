@@ -61,7 +61,9 @@ class ReportGenerator:
         emotion_label: str,
         confidence: float,
         emotional_arc: List[Dict],
-        intensity_level: Optional[str] = None
+        intensity_level: Optional[str] = None,
+        top_emotions: Optional[List[Dict]] = None,
+        dominance_gap: Optional[float] = None
     ) -> BytesIO:
         """
         Generate PDF emotion analysis report.
@@ -72,6 +74,8 @@ class ReportGenerator:
             confidence: Confidence score
             emotional_arc: List of emotional arc entries
             intensity_level: Optional intensity level from audio
+            top_emotions: Optional top-ranked emotions with scores
+            dominance_gap: Optional score delta between top-1 and top-2 emotions
             
         Returns:
             BytesIO: PDF file as bytes
@@ -95,6 +99,16 @@ class ReportGenerator:
         story.append(Paragraph("Dominant Emotion", self.heading_style))
         emotion_text = f"<b>Emotion:</b> {emotion_label.capitalize()}<br/>"
         emotion_text += f"<b>Confidence:</b> {confidence*100:.1f}%"
+        ranked_emotions = top_emotions or []
+        if ranked_emotions:
+            parts = []
+            for entry in ranked_emotions[:3]:
+                label = str(entry.get("emotion", "neutral")).capitalize()
+                score = float(entry.get("score", 0.0))
+                parts.append(f"{label} ({score*100:.1f}%)")
+            emotion_text += f"<br/><b>Top Emotions:</b> {', '.join(parts)}"
+        if dominance_gap is not None:
+            emotion_text += f"<br/><b>Dominance Gap:</b> {float(dominance_gap)*100:.1f}%"
         story.append(Paragraph(emotion_text, self.body_style))
         story.append(Spacer(1, 0.2 * inch))
         

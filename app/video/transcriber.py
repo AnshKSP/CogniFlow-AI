@@ -1,10 +1,11 @@
 """
-Transcriber - Transcribes audio using faster-whisper tiny model.
-Optimized for ultra-fast demo mode.
+Transcriber - Transcribes audio using faster-whisper with translation-first strategy.
+Optimized for better emotion-analysis compatibility.
 """
 from faster_whisper import WhisperModel
 import re
 import logging
+import os
 from indic_transliteration import sanscript
 from indic_transliteration.sanscript import transliterate
 
@@ -13,18 +14,22 @@ logger = logging.getLogger(__name__)
 
 class Transcriber:
     """
-    Transcribes audio using faster-whisper tiny model for ultra-fast processing.
+    Transcribes audio using faster-whisper.
+    Uses English translation output for stronger downstream emotion analysis.
     """
 
     def __init__(self):
-        """Initialize transcriber with tiny model for speed."""
+        """Initialize transcriber model."""
         try:
-            # ULTRA FAST MODE - tiny model with int8 quantization
+            model_size = os.getenv("WHISPER_MODEL_SIZE", "base").strip() or "base"
+            compute_type = os.getenv("WHISPER_COMPUTE_TYPE", "int8").strip() or "int8"
+
             self.model = WhisperModel(
-                "tiny",              # smallest model for speed
-                device="cpu",        # CPU for compatibility
-                compute_type="int8"  # int8 for faster inference
+                model_size,
+                device="cpu",
+                compute_type=compute_type
             )
+            logger.info(f"Whisper model initialized (size={model_size}, compute_type={compute_type})")
         except Exception as e:
             logger.error(f"Failed to initialize Whisper model: {str(e)}")
             raise ValueError(f"Could not initialize transcription model: {str(e)}")
@@ -75,15 +80,14 @@ class Transcriber:
             raise ValueError("Audio path is required")
         
         try:
-            # Fast transcription with minimal beam search
+            # Translation-first for better compatibility with English-only emotion model.
             segments, info = self.model.transcribe(
                 audio_path,
-                beam_size=1,           # faster (default is 5)
-                best_of=1,             # faster (default is 5)
-                vad_filter=True,       # Voice activity detection for better accuracy
-                vad_parameters=dict(
-                    min_silence_duration_ms=500
-                )
+                task="translate",
+                beam_size=3,
+                best_of=3,
+                vad_filter=True,
+                vad_parameters={"min_silence_duration_ms": 500}
             )
             
             # Collect all segments
@@ -92,6 +96,23 @@ class Transcriber:
                 full_text += segment.text + " "
             
             full_text = full_text.strip()
+
+            # Fallback to standard transcription when translation yields no usable text.
+            if not full_text:
+                segments, info = self.model.transcribe(
+                    audio_path,
+                    task="transcribe",
+                    beam_size=2,
+                    best_of=2,
+                    vad_filter=True,
+                    vad_parameters={"min_silence_duration_ms": 500}
+                )
+
+                full_text = ""
+                for segment in segments:
+                    full_text += segment.text + " "
+
+                full_text = full_text.strip()
             
             if not full_text:
                 logger.warning(f"No transcription generated for {audio_path}")
@@ -101,7 +122,7 @@ class Transcriber:
                     "confidence": 0.0
                 }
             
-            # Handle Urdu script conversion
+            # Keep this fallback for cases where translation was not applied.
             if self.contains_urdu_script(full_text):
                 full_text = self.convert_urdu_to_hindi(full_text)
                 detected_language = "hi (normalized)"
