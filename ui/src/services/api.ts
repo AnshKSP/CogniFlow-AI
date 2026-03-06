@@ -11,19 +11,15 @@ export const apiClient = axios.create({
   baseURL: API_BASE_URL || 'http://127.0.0.1:8000'
 })
 
-const METRICS_KEY = 'cogniflow_metrics'
-const METRICS_EVENT = 'cogniflow-metrics-updated'
-const AUTH_TOKEN_KEY = 'cogniflow_auth_token'
-
 export type ChatMode = 'general' | 'pdf'
 export type ResponseMode = 'strict' | 'solve'
-export type ChatProvider = 'local' | 'external'
+export type ChatProvider = 'local' | 'api' | 'external'
 
 export interface ChatPayload {
   question: string
   mode: ChatMode
   response_mode: ResponseMode
-  provider: ChatProvider
+  provider: 'local' | 'api'
   api_key?: string
 }
 
@@ -31,59 +27,76 @@ export interface ChatResponse {
   response: string
 }
 
-export interface ScriptAnalysisResponse {
-  emotion_label: string
+export interface MovieRecommendation {
+  title: string
+  year?: number
+  genre?: string
+  description?: string
+  poster?: string
+}
+
+export interface RecommendationFilters {
+  dominant_genre?: string
+  mood?: string
+  intensity?: string
+  energy_level?: string
+  industry_preference?: string
+}
+
+export interface EmotionArcPoint {
+  start: number
+  end: number
+  mood: string
+  confidence?: number
+  text?: string
+}
+
+export interface EmotionTopEntry {
+  emotion: string
+  score: number
+}
+
+export interface EmotionAnalysisResult {
   dominant_mood: string
+  intensity_level: string
   confidence: number
-  emotional_arc: any[]
-  emotion_summary: string
+  emotional_arc: EmotionArcPoint[]
+  recommendations: MovieRecommendation[]
+  emotion_label?: string
+  emotion_summary?: string
+  script_preview?: string
+  top_emotions?: EmotionTopEntry[]
+  dominance_gap?: number
+}
+
+export interface ImageSearchResult {
+  indexed: boolean
+  answer?: string
+  note?: string
 }
 
 export interface VideoUploadResponse {
-  language_detected: string
-  confidence: number | null
-  transcript_preview: string
-  audio_emotion: {
-    dominant_mood: string
-    emotional_arc: { start: number; end: number; mood: string }[]
+  language_detected?: string
+  confidence?: number | null
+  top_emotions?: EmotionTopEntry[]
+  dominance_gap?: number | null
+  transcript_preview?: string
+  audio_emotion?: {
+    dominant_mood?: string
+    emotional_arc?: EmotionArcPoint[]
   }
-  script_emotion: {
-    dominant_mood: string
-    emotional_arc: { start: number; end: number; mood: string }[]
+  script_emotion?: {
+    emotion_label?: string
+    confidence?: number | null
+    top_emotions?: EmotionTopEntry[]
+    dominance_gap?: number | null
+    dominant_mood?: string
+    emotional_arc?: EmotionArcPoint[]
   }
-}
-
-export interface PdfAnalysisResponse extends ScriptAnalysisResponse {
-  script_preview?: string
-}
-
-export interface DashboardMetrics {
-  totalConversations: number
-  videosProcessed: number
-  aiAccuracyScore: number
-}
-
-export interface AuthUser {
-  full_name: string
-  email: string
-}
-
-export interface AuthResponse {
-  token: string
-  full_name: string
-  email: string
-}
-
-interface BackendIndexStats {
-  total_chunks: number
-  unique_documents: number
-}
-
-interface StoredMetrics {
-  totalConversations: number
-  videosProcessed: number
-  analyzedCount: number
-  analyzedConfidenceSum: number
+  dominant_mood?: string
+  intensity_level?: string
+  emotional_arc?: EmotionArcPoint[]
+  recommendations?: MovieRecommendation[]
 }
 
 interface BackendChatRequest {
@@ -99,156 +112,197 @@ interface BackendRagRequest {
   api_key?: string
 }
 
-const readMetrics = (): StoredMetrics => {
-  try {
-    const raw = localStorage.getItem(METRICS_KEY)
-    if (!raw) {
-      return {
-        totalConversations: 0,
-        videosProcessed: 0,
-        analyzedCount: 0,
-        analyzedConfidenceSum: 0
-      }
-    }
-    return JSON.parse(raw) as StoredMetrics
-  } catch {
-    return {
-      totalConversations: 0,
-      videosProcessed: 0,
-      analyzedCount: 0,
-      analyzedConfidenceSum: 0
-    }
+const normalizeProvider = (provider: ChatProvider): 'local' | 'api' =>
+  provider === 'api' || provider === 'external' ? 'api' : 'local'
+
+const normalizeConfidence = (value: unknown): number => {
+  if (typeof value !== 'number' || Number.isNaN(value)) return 0
+  return value <= 1 ? Math.round(value * 100) : Math.round(value)
+}
+
+const normalizeMoodLabel = (raw: unknown): string => {
+  const value = String(raw || 'neutral').toLowerCase().trim()
+
+  const emotionToMood: Record<string, string> = {
+    joy: 'energetic',
+    anger: 'intense',
+    sadness: 'dark',
+    fear: 'dramatic',
+    surprise: 'dramatic',
+    disgust: 'dark',
+    neutral: 'calm'
   }
+
+  if (value in emotionToMood) return emotionToMood[value]
+  return value || 'calm'
 }
 
-const writeMetrics = (next: StoredMetrics) => {
-  localStorage.setItem(METRICS_KEY, JSON.stringify(next))
-  window.dispatchEvent(new Event(METRICS_EVENT))
+const normalizeArc = (rawArc: unknown): EmotionArcPoint[] => {
+  if (!Array.isArray(rawArc)) return []
+
+  return rawArc.map((entry, index) => {
+    const item = (entry || {}) as Record<string, unknown>
+    const start = typeof item.start === 'number' ? item.start : index * 2
+    const end = typeof item.end === 'number' ? item.end : start + 2
+    const moodRaw = item.mood ?? item.emotion ?? 'neutral'
+    const text = typeof item.text === 'string' ? item.text : undefined
+    const confidence = normalizeConfidence(item.confidence)
+
+    return {
+      start,
+      end,
+      mood: normalizeMoodLabel(moodRaw),
+      confidence,
+      text
+    }
+  })
 }
 
-const incrementConversation = () => {
-  const metrics = readMetrics()
-  metrics.totalConversations += 1
-  writeMetrics(metrics)
+const inferIntensity = (confidencePercent: number): string => {
+  if (confidencePercent >= 80) return 'high'
+  if (confidencePercent >= 60) return 'medium'
+  return 'low'
 }
 
-const incrementVideos = () => {
-  const metrics = readMetrics()
-  metrics.videosProcessed += 1
-  writeMetrics(metrics)
+const normalizeTopEmotions = (raw: unknown): EmotionTopEntry[] => {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((entry) => {
+      const item = (entry || {}) as Record<string, unknown>
+      return {
+        emotion: String(item.emotion || item.label || 'neutral').toLowerCase(),
+        score: normalizeConfidence(item.score)
+      }
+    })
+    .filter((entry) => entry.score > 0)
+    .slice(0, 3)
 }
 
-const addAnalysisConfidence = (confidencePercent: number) => {
-  const metrics = readMetrics()
-  metrics.analyzedCount += 1
-  metrics.analyzedConfidenceSum += confidencePercent
-  writeMetrics(metrics)
-}
-
-export const getDashboardMetrics = (): DashboardMetrics => {
-  const metrics = readMetrics()
-  const aiAccuracyScore = metrics.analyzedCount
-    ? metrics.analyzedConfidenceSum / metrics.analyzedCount
-    : 0
+const mapVideoResponse = (data: VideoUploadResponse): EmotionAnalysisResult => {
+  const arc = normalizeArc(data.emotional_arc || data.audio_emotion?.emotional_arc || [])
+  const dominantMood = data.dominant_mood || data.audio_emotion?.dominant_mood || data.script_emotion?.dominant_mood || 'calm'
+  const confidence = normalizeConfidence(data.confidence ?? 0)
+  const topEmotions = normalizeTopEmotions(data.top_emotions || data.script_emotion?.top_emotions || [])
+  const dominanceGap = normalizeConfidence(data.dominance_gap ?? data.script_emotion?.dominance_gap ?? 0)
 
   return {
-    totalConversations: metrics.totalConversations,
-    videosProcessed: metrics.videosProcessed,
-    aiAccuracyScore
+    dominant_mood: dominantMood,
+    intensity_level: data.intensity_level || inferIntensity(confidence),
+    confidence,
+    emotional_arc: arc,
+    recommendations: data.recommendations || [],
+    top_emotions: topEmotions,
+    dominance_gap: dominanceGap
   }
 }
 
-export const getMetricsEventName = () => METRICS_EVENT
+const mapGenericResponse = (data: Record<string, unknown>): EmotionAnalysisResult => {
+  const confidence = normalizeConfidence(data.confidence)
+  const arc = normalizeArc(data.emotional_arc)
+  const recommendations = Array.isArray(data.recommendations) ? (data.recommendations as MovieRecommendation[]) : []
+  const topEmotions = normalizeTopEmotions(data.top_emotions)
+  const dominanceGap = normalizeConfidence(data.dominance_gap)
 
-export const getAuthToken = () => localStorage.getItem(AUTH_TOKEN_KEY) || ''
-
-export const setAuthToken = (token: string) => {
-  if (!token) return
-  localStorage.setItem(AUTH_TOKEN_KEY, token)
+  return {
+    dominant_mood: String(data.dominant_mood || data.emotion_label || 'calm'),
+    intensity_level: String(data.intensity_level || inferIntensity(confidence)),
+    confidence,
+    emotional_arc: arc,
+    recommendations,
+    emotion_label: typeof data.emotion_label === 'string' ? data.emotion_label : undefined,
+    emotion_summary: typeof data.emotion_summary === 'string' ? data.emotion_summary : undefined,
+    script_preview: typeof data.script_preview === 'string' ? data.script_preview : undefined,
+    top_emotions: topEmotions,
+    dominance_gap: dominanceGap
+  }
 }
 
-export const clearAuthToken = () => {
-  localStorage.removeItem(AUTH_TOKEN_KEY)
+export const recommendMovies = async (input: {
+  dominant_mood: string
+  intensity_level: string
+}): Promise<MovieRecommendation[]> => {
+  try {
+    const { data } = await apiClient.post<{ recommendations?: MovieRecommendation[] }>('/recommend', {
+      mood: input.dominant_mood,
+      intensity: input.intensity_level
+    })
+    return data.recommendations || []
+  } catch {
+    return []
+  }
 }
 
-const authHeaders = () => {
-  const token = getAuthToken()
-  return token ? { Authorization: `Bearer ${token}` } : {}
-}
-
-export const getIndexStats = async (): Promise<BackendIndexStats> => {
-  const { data } = await apiClient.get<BackendIndexStats>('/index-stats')
-  return data
-}
-
-export const signup = async (full_name: string, email: string, password: string): Promise<AuthResponse> => {
-  const { data } = await apiClient.post<AuthResponse>('/auth/signup', { full_name, email, password })
-  return data
-}
-
-export const login = async (email: string, password: string): Promise<AuthResponse> => {
-  const { data } = await apiClient.post<AuthResponse>('/auth/login', { email, password })
-  return data
-}
-
-export const getCurrentUser = async (): Promise<AuthUser> => {
-  const { data } = await apiClient.get<AuthUser>('/auth/me', { headers: authHeaders() })
-  return data
-}
-
-export const logout = async (): Promise<void> => {
-  await apiClient.post('/auth/logout', {}, { headers: authHeaders() })
-}
-
-const mapAudioArcToIntensitySeries = (
-  arc: { start: number; end: number; mood: string }[]
-): number[] => {
-  const moodToValue: Record<string, number> = {
-    intense: 95,
-    energetic: 85,
-    dramatic: 80,
-    dark: 70,
-    calm: 40,
-    neutral: 50
+export const recommendMoviesByFilters = async (filters: RecommendationFilters): Promise<MovieRecommendation[]> => {
+  const payload: RecommendationFilters = {
+    dominant_genre: filters.dominant_genre || undefined,
+    mood: filters.mood || undefined,
+    intensity: filters.intensity || undefined,
+    energy_level: filters.energy_level || undefined,
+    industry_preference: filters.industry_preference || undefined
   }
 
-  return arc.map((entry) => moodToValue[entry.mood] ?? 50)
+  const { data } = await apiClient.post<{ recommendations?: MovieRecommendation[] }>('/recommend', payload)
+  return data.recommendations || []
 }
 
-const normalizeProvider = (provider: ChatProvider): 'local' | 'api' =>
-  provider === 'external' ? 'api' : 'local'
-
-export const analyzeScript = async (text: string): Promise<ScriptAnalysisResponse> => {
-  const { data } = await apiClient.post<ScriptAnalysisResponse>('/script/analyze', { text })
-  return data
+const withRecommendations = async (result: EmotionAnalysisResult): Promise<EmotionAnalysisResult> => {
+  if (result.recommendations.length > 0) return result
+  const recommendations = await recommendMovies({
+    dominant_mood: result.dominant_mood,
+    intensity_level: result.intensity_level
+  })
+  return { ...result, recommendations }
 }
 
-export const uploadVideo = async (file: File) => {
+export const analyzeVideo = async (file: File): Promise<EmotionAnalysisResult> => {
   const formData = new FormData()
   formData.append('file', file)
-
   const { data } = await apiClient.post<VideoUploadResponse>('/video/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   })
-
-  return data
+  return withRecommendations(mapVideoResponse(data))
 }
 
-export const analyzeYouTubeVideo = async (url: string): Promise<VideoUploadResponse> => {
-  const encoded = encodeURIComponent(url)
-  const { data } = await apiClient.post<VideoUploadResponse>(`/video/youtube?url=${encoded}`)
-  return data
+export const analyzeYouTubeVideo = async (url: string): Promise<EmotionAnalysisResult> => {
+  const { data } = await apiClient.post<VideoUploadResponse>('/video/youtube', null, {
+    params: { url }
+  })
+  return withRecommendations(mapVideoResponse(data))
 }
 
-export const uploadPDF = async (file: File): Promise<PdfAnalysisResponse> => {
+export const uploadVideoReport = async (file: File): Promise<Blob> => {
   const formData = new FormData()
   formData.append('file', file)
 
-  const { data } = await apiClient.post<PdfAnalysisResponse>('/script/upload-pdf', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
+  const response = await apiClient.post('/video/upload-report', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    responseType: 'blob'
   })
 
-  return data
+  return response.data as Blob
+}
+
+export const youtubeVideoReport = async (url: string): Promise<Blob> => {
+  const response = await apiClient.post('/video/youtube-report', null, {
+    params: { url },
+    responseType: 'blob'
+  })
+
+  return response.data as Blob
+}
+
+export const analyzeScript = async (text: string): Promise<EmotionAnalysisResult> => {
+  const { data } = await apiClient.post<Record<string, unknown>>('/script/analyze', { text })
+  return withRecommendations(mapGenericResponse(data))
+}
+
+export const analyzePdf = async (file: File): Promise<EmotionAnalysisResult> => {
+  const formData = new FormData()
+  formData.append('file', file)
+  const { data } = await apiClient.post<Record<string, unknown>>('/script/upload-pdf', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+  return withRecommendations(mapGenericResponse(data))
 }
 
 export const generateReport = async (text: string): Promise<Blob> => {
@@ -273,54 +327,66 @@ export const sendChat = async (payload: ChatPayload): Promise<ChatResponse> => {
     const ragRequest: BackendRagRequest = {
       question: payload.question,
       mode: payload.response_mode,
-      llm_type: normalizeProvider(payload.provider),
+      llm_type: payload.provider,
       api_key: payload.api_key
     }
 
     const { data } = await apiClient.post<{ answer: string }>('/rag-query', ragRequest)
-    incrementConversation()
     return { response: data.answer }
   }
 
   const chatRequest: BackendChatRequest = {
     message: payload.question,
-    llm_type: normalizeProvider(payload.provider),
+    llm_type: payload.provider,
     api_key: payload.api_key
   }
 
   const { data } = await apiClient.post<ChatResponse>('/chat', chatRequest)
-  incrementConversation()
   return data
 }
 
 export const uploadChatPDF = async (file: File): Promise<void> => {
   const formData = new FormData()
   formData.append('file', file)
-
   await apiClient.post('/upload-pdf', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   })
 }
 
-const inferIntensity = (confidencePercent: number): string => {
-  if (confidencePercent >= 80) return 'High'
-  if (confidencePercent >= 60) return 'Medium'
-  return 'Low'
+export const uploadImageForIndex = async (file: File): Promise<ImageSearchResult> => {
+  const formData = new FormData()
+  formData.append('file', file)
+  await apiClient.post('/upload-image?mode=index&llm_type=local', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+  return { indexed: true }
 }
 
-const buildEmotionBreakdown = (
-  dominantMood: string,
-  confidencePercent: number
-): { name: string; value: number; color: string }[] => {
-  const dominant = Math.max(20, Math.min(95, Math.round(confidencePercent)))
-  const secondary = Math.max(5, Math.round((100 - dominant) * 0.6))
-  const tertiary = Math.max(5, 100 - dominant - secondary)
+export const solveImageDirect = async (file: File, provider: 'local' | 'api', apiKey?: string): Promise<ImageSearchResult> => {
+  const formData = new FormData()
+  formData.append('file', file)
+  const apiQuery = apiKey ? `&api_key=${encodeURIComponent(apiKey)}` : ''
+  const { data } = await apiClient.post<{ answer?: string; note?: string }>(
+    `/upload-image?mode=solve&llm_type=${provider}${apiQuery}`,
+    formData,
+    { headers: { 'Content-Type': 'multipart/form-data' } }
+  )
+  return { indexed: false, answer: data.answer, note: data.note }
+}
 
-  return [
-    { name: dominantMood, value: dominant, color: '#3b82f6' },
-    { name: 'Secondary', value: secondary, color: '#8b5cf6' },
-    { name: 'Residual', value: tertiary, color: '#22c55e' }
-  ]
+export const askIndexedContentQuestion = async (input: {
+  question: string
+  mode: ResponseMode
+  provider: 'local' | 'api'
+  api_key?: string
+}): Promise<string> => {
+  const { data } = await apiClient.post<{ answer: string }>('/rag-query', {
+    question: input.question,
+    mode: input.mode,
+    llm_type: input.provider,
+    api_key: input.api_key
+  })
+  return data.answer
 }
 
 export const chatbotApi = {
@@ -340,73 +406,8 @@ export const chatbotApi = {
       question: input.message,
       mode: input.mode,
       response_mode: input.responseMode,
-      provider: input.provider,
+      provider: normalizeProvider(input.provider),
       api_key: input.apiKey
     })
-  }
-}
-
-export const emotionApi = {
-  async analyze(file: File, type: 'video' | 'script' | 'pdf') {
-    if (type === 'video') {
-      const data = await uploadVideo(file)
-      const confidence = Math.round((data.confidence ?? 0) * 100)
-      incrementVideos()
-      addAnalysisConfidence(confidence)
-
-      return {
-        dominantMood: data.audio_emotion.dominant_mood,
-        intensity: inferIntensity(confidence),
-        confidence,
-        emotionalArc: mapAudioArcToIntensitySeries(data.audio_emotion.emotional_arc),
-        emotions: buildEmotionBreakdown(data.audio_emotion.dominant_mood, confidence)
-      }
-    }
-
-    if (type === 'pdf') {
-      const data = await uploadPDF(file)
-      const confidence = Math.round(data.confidence * 100)
-      addAnalysisConfidence(confidence)
-
-      return {
-        dominantMood: data.dominant_mood,
-        intensity: inferIntensity(confidence),
-        confidence,
-        emotionalArc: data.emotional_arc.map((point) => Math.round((point.confidence ?? 0) * 100)),
-        emotions: buildEmotionBreakdown(data.dominant_mood, confidence)
-      }
-    }
-
-    const scriptText = await file.text()
-    if (!scriptText.trim()) {
-      throw new Error('Script file is empty.')
-    }
-
-    const data = await analyzeScript(scriptText)
-    const confidence = Math.round(data.confidence * 100)
-    addAnalysisConfidence(confidence)
-
-    return {
-      dominantMood: data.dominant_mood,
-      intensity: inferIntensity(confidence),
-      confidence,
-      emotionalArc: data.emotional_arc.map((point) => Math.round((point.confidence ?? 0) * 100)),
-      emotions: buildEmotionBreakdown(data.dominant_mood, confidence)
-    }
-  }
-  ,
-  async analyzeYouTube(url: string) {
-    const data = await analyzeYouTubeVideo(url)
-    const confidence = Math.round((data.confidence ?? 0) * 100)
-    incrementVideos()
-    addAnalysisConfidence(confidence)
-
-    return {
-      dominantMood: data.audio_emotion.dominant_mood,
-      intensity: inferIntensity(confidence),
-      confidence,
-      emotionalArc: mapAudioArcToIntensitySeries(data.audio_emotion.emotional_arc),
-      emotions: buildEmotionBreakdown(data.audio_emotion.dominant_mood, confidence)
-    }
   }
 }

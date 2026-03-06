@@ -82,8 +82,12 @@ class VideoPipeline:
             audio_emotion = self.emotion_analyzer.analyze(audio_path)
             intensity_level = audio_emotion.get("intensity_level", "medium")
             
-            # Map emotion_label to dominant_mood
-            dominant_mood = self._map_emotion_to_mood(emotion_label)
+            # Map emotion_label + audio intensity to dominant_mood
+            dominant_mood = self._map_emotion_to_mood(
+                emotion_label,
+                intensity_level=intensity_level,
+                script_confidence=script_emotion.get("confidence", 0.0)
+            )
             
             # Add dominant_mood to audio_emotion for backward compatibility
             audio_emotion["dominant_mood"] = dominant_mood
@@ -138,8 +142,12 @@ class VideoPipeline:
             audio_emotion = self.emotion_analyzer.analyze(audio_path)
             intensity_level = audio_emotion.get("intensity_level", "medium")
             
-            # Map emotion_label to dominant_mood
-            dominant_mood = self._map_emotion_to_mood(emotion_label)
+            # Map emotion_label + audio intensity to dominant_mood
+            dominant_mood = self._map_emotion_to_mood(
+                emotion_label,
+                intensity_level=intensity_level,
+                script_confidence=script_emotion.get("confidence", 0.0)
+            )
             
             # Add dominant_mood to audio_emotion for backward compatibility
             audio_emotion["dominant_mood"] = dominant_mood
@@ -160,7 +168,12 @@ class VideoPipeline:
             logger.error(f"Error processing YouTube URL {url}: {str(e)}")
             raise ValueError(f"Failed to process YouTube video: {str(e)}")
 
-    def _map_emotion_to_mood(self, emotion_label: str) -> str:
+    def _map_emotion_to_mood(
+        self,
+        emotion_label: str,
+        intensity_level: str = "medium",
+        script_confidence: float = 0.0
+    ) -> str:
         """
         Map emotion label from model to dominant mood.
         
@@ -175,6 +188,8 @@ class VideoPipeline:
         
         Args:
             emotion_label: Emotion label from script analysis
+            intensity_level: Audio intensity level (low/medium/high)
+            script_confidence: Confidence for script emotion label
             
         Returns:
             str: Dominant mood classification
@@ -193,6 +208,17 @@ class VideoPipeline:
             "neutral": "calm"
         }
         
+        if emotion_label == "neutral":
+            # If script is weakly neutral but delivery is highly energetic, classify as intense.
+            try:
+                neutral_confidence = float(script_confidence)
+            except Exception:
+                neutral_confidence = 0.0
+
+            if str(intensity_level).lower() == "high" and neutral_confidence < 0.70:
+                return "intense"
+            return "calm"
+
         # Return mapped mood or default to calm
         return emotion_to_mood.get(emotion_label, "calm")
 

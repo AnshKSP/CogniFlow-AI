@@ -1,4 +1,5 @@
-from fastapi import FastAPI, HTTPException, Body
+from fastapi import FastAPI, HTTPException, Body, Header
+from fastapi.middleware.cors import CORSMiddleware
 from app.recommendation.engine import RecommendationEngine
 
 from app.schemas.chat import ChatRequest, ChatResponse
@@ -15,16 +16,16 @@ from app.rag.pipeline import RAGPipeline
 
 from app.database.database import engine, SessionLocal
 from app.database import models
-from app.database.models import UploadedDocument
+from app.database.models import UploadedDocument, User, AuthSession
+from app.schemas.auth import SignupRequest, LoginRequest, AuthResponse
+from app.core.auth_utils import hash_password, verify_password, create_session_token
 
 from app.video.pipeline import VideoPipeline
-from app.video.script_analyzer import ScriptAnalyzer
 from app.script.pdf_loader import PDFLoader
 from app.script.report_generator import ReportGenerator
 from app.script.script_pipeline import ScriptPipeline
 from fastapi.responses import Response, StreamingResponse
 video_pipeline = VideoPipeline()
-script_analyzer = ScriptAnalyzer()
 pdf_loader = PDFLoader()
 report_generator = ReportGenerator()
 script_pipeline = ScriptPipeline()
@@ -39,6 +40,14 @@ ALLOWED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg"}
 
 app = FastAPI(title="CogniFlow AI - Multi-Mode Backend")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # RAG components (global in-memory)
 embedder = Embedder()
 vector_store = FAISSStore(dim=384)
@@ -52,6 +61,103 @@ image_loader = ImageLoader()
 @app.get("/")
 def root():
     return {"status": "Server running"}
+
+
+def _validate_email(email: str) -> str:
+    normalized = email.strip().lower()
+    if "@" not in normalized or "." not in normalized.split("@")[-1]:
+        raise HTTPException(status_code=400, detail="Invalid email format.")
+    return normalized
+
+
+def _get_token(authorization: str | None) -> str:
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Missing Authorization header.")
+    parts = authorization.split(" ", 1)
+    if len(parts) != 2 or parts[0].lower() != "bearer" or not parts[1].strip():
+        raise HTTPException(status_code=401, detail="Invalid Authorization header.")
+    return parts[1].strip()
+
+
+@app.post("/auth/signup", response_model=AuthResponse)
+def signup(request: SignupRequest):
+    full_name = request.full_name.strip()
+    if len(full_name) < 2:
+        raise HTTPException(status_code=400, detail="Full name must be at least 2 characters.")
+    if len(request.password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters.")
+
+    email = _validate_email(request.email)
+    db = SessionLocal()
+    try:
+        existing = db.query(User).filter(User.email == email).first()
+        if existing:
+            raise HTTPException(status_code=409, detail="Email already registered.")
+
+        user = User(
+            full_name=full_name,
+            email=email,
+            password_hash=hash_password(request.password)
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
+        token = create_session_token()
+        db.add(AuthSession(user_id=user.id, token=token))
+        db.commit()
+
+        return AuthResponse(token=token, full_name=user.full_name, email=user.email)
+    finally:
+        db.close()
+
+
+@app.post("/auth/login", response_model=AuthResponse)
+def login(request: LoginRequest):
+    email = _validate_email(request.email)
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.email == email).first()
+        if not user or not verify_password(request.password, user.password_hash):
+            raise HTTPException(status_code=401, detail="Invalid email or password.")
+
+        token = create_session_token()
+        db.add(AuthSession(user_id=user.id, token=token))
+        db.commit()
+
+        return AuthResponse(token=token, full_name=user.full_name, email=user.email)
+    finally:
+        db.close()
+
+
+@app.get("/auth/me")
+def auth_me(authorization: str | None = Header(default=None)):
+    token = _get_token(authorization)
+    db = SessionLocal()
+    try:
+        session = db.query(AuthSession).filter(AuthSession.token == token).first()
+        if not session:
+            raise HTTPException(status_code=401, detail="Invalid or expired session.")
+        user = db.query(User).filter(User.id == session.user_id).first()
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found.")
+        return {"full_name": user.full_name, "email": user.email}
+    finally:
+        db.close()
+
+
+@app.post("/auth/logout")
+def logout(authorization: str | None = Header(default=None)):
+    token = _get_token(authorization)
+    db = SessionLocal()
+    try:
+        session = db.query(AuthSession).filter(AuthSession.token == token).first()
+        if session:
+            db.delete(session)
+            db.commit()
+        return {"message": "Logged out successfully."}
+    finally:
+        db.close()
 
 @app.post("/chat", response_model=ChatResponse)
 def chat(request: ChatRequest):
@@ -318,6 +424,54 @@ class RecommendationRequest(BaseModel):
     industry_preference: str | None = None
 
 
+def _safe_float(value, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except Exception:
+        return default
+
+
+def _confidence_to_intensity(confidence: float) -> str:
+    score = _safe_float(confidence, 0.0)
+    # If confidence is 0-1, normalize to percentage-like scale.
+    if 0.0 <= score <= 1.0:
+        score = score * 100.0
+
+    if score >= 80:
+        return "high"
+    if score >= 60:
+        return "medium"
+    return "low"
+
+
+def _recommend_for_mood(dominant_mood: str, intensity_level: str):
+    try:
+        return recommendation_engine.recommend(
+            dominant_genre=None,
+            mood=dominant_mood,
+            intensity=intensity_level,
+            energy_level=None,
+            industry_preference=None
+        )
+    except Exception:
+        return []
+
+
+def _normalize_top_emotions(value) -> list[dict]:
+    if not isinstance(value, list):
+        return []
+
+    normalized: list[dict] = []
+    for item in value[:3]:
+        if not isinstance(item, dict):
+            continue
+        normalized.append({
+            "emotion": str(item.get("emotion", "neutral")).lower(),
+            "score": _safe_float(item.get("score", 0.0), 0.0)
+        })
+    return normalized
+
+
 @app.post("/recommend")
 def recommend_movies(request: RecommendationRequest):
     try:
@@ -365,19 +519,78 @@ async def upload_video(file: UploadFile = File(...)):
 
     result = video_pipeline.process_uploaded_video(path)
 
+    dominant_mood = result.get("script_emotion", {}).get("dominant_mood", "calm")
+    intensity_level = result.get("audio_emotion", {}).get("intensity_level", "medium")
+    confidence = _safe_float(result.get("script_emotion", {}).get("confidence", 0.0), 0.0)
+    top_emotions = _normalize_top_emotions(result.get("script_emotion", {}).get("top_emotions", []))
+    dominance_gap = _safe_float(result.get("script_emotion", {}).get("dominance_gap", 0.0), 0.0)
+    recommendations = _recommend_for_mood(dominant_mood, intensity_level)
+
     return {
+        "dominant_mood": dominant_mood,
+        "intensity_level": intensity_level,
+        "confidence": confidence,
+        "top_emotions": top_emotions,
+        "dominance_gap": dominance_gap,
+        "emotional_arc": result.get("script_emotion", {}).get("emotional_arc", []),
+        "recommendations": recommendations,
         "language_detected": result["transcript"]["language"],
-        "confidence": result["transcript"].get("confidence", None),
+        "transcript_confidence": result["transcript"].get("confidence", None),
         "transcript_preview": result["transcript"]["full_text"][:500],
         "audio_emotion": {
             "dominant_mood": result["audio_emotion"]["dominant_mood"],
+            "intensity_level": result["audio_emotion"].get("intensity_level", intensity_level),
             "emotional_arc": result["audio_emotion"]["emotional_arc"]
         },
         "script_emotion": {
+            "emotion_label": result["script_emotion"].get("emotion_label", "neutral"),
+            "confidence": result["script_emotion"].get("confidence", confidence),
+            "top_emotions": top_emotions,
+            "dominance_gap": dominance_gap,
             "dominant_mood": result["script_emotion"]["dominant_mood"],
             "emotional_arc": result["script_emotion"]["emotional_arc"]
         }
     }
+
+
+@app.post("/video/upload-report")
+async def upload_video_report(file: UploadFile = File(...)):
+    """
+    Upload a video and directly return a downloadable emotion report PDF.
+    """
+    try:
+        folder = "uploaded_videos"
+        os.makedirs(folder, exist_ok=True)
+        path = os.path.join(folder, file.filename)
+
+        content = await file.read()
+        with open(path, "wb") as f:
+            f.write(content)
+
+        result = video_pipeline.process_uploaded_video(path)
+        transcript_text = result.get("transcript", {}).get("full_text", "")
+        script_emotion = result.get("script_emotion", {})
+        audio_emotion = result.get("audio_emotion", {})
+
+        pdf_buffer = report_generator.generate_report(
+            script_preview=transcript_text or "No transcript available.",
+            emotion_label=script_emotion.get("emotion_label", "neutral"),
+            confidence=_safe_float(script_emotion.get("confidence", 0.0), 0.0),
+            emotional_arc=script_emotion.get("emotional_arc", []),
+            intensity_level=audio_emotion.get("intensity_level", None),
+            top_emotions=_normalize_top_emotions(script_emotion.get("top_emotions", [])),
+            dominance_gap=_safe_float(script_emotion.get("dominance_gap", 0.0), 0.0)
+        )
+
+        return StreamingResponse(
+            pdf_buffer,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": "attachment; filename=video_emotion_report.pdf"
+            }
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/video/youtube")
@@ -385,19 +598,73 @@ def youtube_video(url: str):
 
     result = video_pipeline.process_youtube(url)
 
+    dominant_mood = result.get("script_emotion", {}).get("dominant_mood", "calm")
+    intensity_level = result.get("audio_emotion", {}).get("intensity_level", "medium")
+    confidence = _safe_float(result.get("script_emotion", {}).get("confidence", 0.0), 0.0)
+    top_emotions = _normalize_top_emotions(result.get("script_emotion", {}).get("top_emotions", []))
+    dominance_gap = _safe_float(result.get("script_emotion", {}).get("dominance_gap", 0.0), 0.0)
+    recommendations = _recommend_for_mood(dominant_mood, intensity_level)
+
     return {
+        "dominant_mood": dominant_mood,
+        "intensity_level": intensity_level,
+        "confidence": confidence,
+        "top_emotions": top_emotions,
+        "dominance_gap": dominance_gap,
+        "emotional_arc": result.get("script_emotion", {}).get("emotional_arc", []),
+        "recommendations": recommendations,
         "language_detected": result["transcript"]["language"],
-        "confidence": result["transcript"].get("confidence", None),
+        "transcript_confidence": result["transcript"].get("confidence", None),
         "transcript_preview": result["transcript"]["full_text"][:500],
         "audio_emotion": {
             "dominant_mood": result["audio_emotion"]["dominant_mood"],
+            "intensity_level": result["audio_emotion"].get("intensity_level", intensity_level),
             "emotional_arc": result["audio_emotion"]["emotional_arc"]
         },
         "script_emotion": {
+            "emotion_label": result["script_emotion"].get("emotion_label", "neutral"),
+            "confidence": result["script_emotion"].get("confidence", confidence),
+            "top_emotions": top_emotions,
+            "dominance_gap": dominance_gap,
             "dominant_mood": result["script_emotion"]["dominant_mood"],
             "emotional_arc": result["script_emotion"]["emotional_arc"]
         }
     }
+
+
+@app.post("/video/youtube-report")
+def youtube_video_report(url: str):
+    """
+    Analyze a YouTube video URL and return a downloadable emotion report PDF.
+    """
+    try:
+        if not url or not isinstance(url, str):
+            raise ValueError("A valid YouTube URL is required.")
+
+        result = video_pipeline.process_youtube(url)
+        transcript_text = result.get("transcript", {}).get("full_text", "")
+        script_emotion = result.get("script_emotion", {})
+        audio_emotion = result.get("audio_emotion", {})
+
+        pdf_buffer = report_generator.generate_report(
+            script_preview=transcript_text or "No transcript available.",
+            emotion_label=script_emotion.get("emotion_label", "neutral"),
+            confidence=_safe_float(script_emotion.get("confidence", 0.0), 0.0),
+            emotional_arc=script_emotion.get("emotional_arc", []),
+            intensity_level=audio_emotion.get("intensity_level", None),
+            top_emotions=_normalize_top_emotions(script_emotion.get("top_emotions", [])),
+            dominance_gap=_safe_float(script_emotion.get("dominance_gap", 0.0), 0.0)
+        )
+
+        return StreamingResponse(
+            pdf_buffer,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": "attachment; filename=youtube_video_emotion_report.pdf"
+            }
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 class ScriptAnalyzeRequest(BaseModel):
@@ -419,6 +686,8 @@ def analyze_script(request: ScriptAnalyzeRequest):
         emotion_label = result.get("emotion_label", "neutral")
         confidence = result.get("confidence", 0.0)
         emotional_arc = result.get("emotional_arc", [])
+        top_emotions = _normalize_top_emotions(result.get("top_emotions", []))
+        dominance_gap = _safe_float(result.get("dominance_gap", 0.0), 0.0)
         
         # Map emotion_label to dominant_mood using existing mapping
         emotion_to_mood = {
@@ -433,15 +702,22 @@ def analyze_script(request: ScriptAnalyzeRequest):
         
         dominant_mood = emotion_to_mood.get(emotion_label.lower(), "calm")
         
+        intensity_level = _confidence_to_intensity(confidence)
+        recommendations = _recommend_for_mood(dominant_mood, intensity_level)
+
         # Generate emotion summary
         emotion_summary = f"The script expresses {emotion_label} with {confidence*100:.1f}% confidence."
         
         return {
             "emotion_label": emotion_label,
             "dominant_mood": dominant_mood,
+            "intensity_level": intensity_level,
             "confidence": confidence,
+            "top_emotions": top_emotions,
+            "dominance_gap": dominance_gap,
             "emotional_arc": emotional_arc,
-            "emotion_summary": emotion_summary
+            "emotion_summary": emotion_summary,
+            "recommendations": recommendations
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -483,6 +759,8 @@ async def upload_script_pdf(file: UploadFile = File(...)):
         emotion_label = result.get("emotion_label", "neutral")
         confidence = result.get("confidence", 0.0)
         emotional_arc = result.get("emotional_arc", [])
+        top_emotions = _normalize_top_emotions(result.get("top_emotions", []))
+        dominance_gap = _safe_float(result.get("dominance_gap", 0.0), 0.0)
         
         # Map emotion_label to dominant_mood
         emotion_to_mood = {
@@ -497,16 +775,23 @@ async def upload_script_pdf(file: UploadFile = File(...)):
         
         dominant_mood = emotion_to_mood.get(emotion_label.lower(), "calm")
         
+        intensity_level = _confidence_to_intensity(confidence)
+        recommendations = _recommend_for_mood(dominant_mood, intensity_level)
+
         # Generate emotion summary
         emotion_summary = f"The script expresses {emotion_label} with {confidence*100:.1f}% confidence."
         
         return {
             "emotion_label": emotion_label,
             "dominant_mood": dominant_mood,
+            "intensity_level": intensity_level,
             "confidence": confidence,
+            "top_emotions": top_emotions,
+            "dominance_gap": dominance_gap,
             "emotional_arc": emotional_arc,
             "emotion_summary": emotion_summary,
-            "script_preview": extracted_text[:500]  # Preview of extracted text
+            "script_preview": extracted_text[:500],  # Preview of extracted text
+            "recommendations": recommendations
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -546,6 +831,8 @@ async def upload_pdf_report(file: UploadFile = File(...)):
         emotion_label = result.get("emotion_label", "neutral")
         confidence = result.get("confidence", 0.0)
         emotional_arc = result.get("emotional_arc", [])
+        top_emotions = _normalize_top_emotions(result.get("top_emotions", []))
+        dominance_gap = _safe_float(result.get("dominance_gap", 0.0), 0.0)
 
         # Generate PDF report
         pdf_buffer = report_generator.generate_report(
@@ -553,7 +840,9 @@ async def upload_pdf_report(file: UploadFile = File(...)):
             emotion_label=emotion_label,
             confidence=confidence,
             emotional_arc=emotional_arc,
-            intensity_level=None
+            intensity_level=None,
+            top_emotions=top_emotions,
+            dominance_gap=dominance_gap
         )
 
         return StreamingResponse(
@@ -584,6 +873,8 @@ async def generate_script_report(data: dict = Body(...)):
         emotion_label = result.get("emotion_label", "neutral")
         confidence = result.get("confidence", 0.0)
         emotional_arc = result.get("emotional_arc", [])
+        top_emotions = _normalize_top_emotions(result.get("top_emotions", []))
+        dominance_gap = _safe_float(result.get("dominance_gap", 0.0), 0.0)
 
         # Generate PDF report
         pdf_buffer = report_generator.generate_report(
@@ -591,7 +882,9 @@ async def generate_script_report(data: dict = Body(...)):
             emotion_label=emotion_label,
             confidence=confidence,
             emotional_arc=emotional_arc,
-            intensity_level=None
+            intensity_level=None,
+            top_emotions=top_emotions,
+            dominance_gap=dominance_gap
         )
         
         # Return PDF as downloadable file
@@ -604,3 +897,4 @@ async def generate_script_report(data: dict = Body(...)):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
