@@ -39,10 +39,11 @@ export default function PageWrapper({ children, theme = 'ocean' }: PageWrapperPr
           })
         })
       }}
-      className="relative space-y-6"
+      className="relative overflow-hidden rounded-[2.4rem] border border-[#ded7cc] bg-[linear-gradient(180deg,rgba(251,248,241,0.92)_0%,rgba(244,239,230,0.92)_100%)] px-4 py-5 shadow-[0_24px_60px_-42px_rgba(82,94,104,0.34)] sm:px-5 sm:py-6 lg:px-6"
     >
       <PrismaticScene theme={theme} mouseX={mouse.x} mouseY={mouse.y} />
-      <div className="pointer-events-none absolute inset-0 rounded-[2rem] border border-white/55" />
+      <div className="pointer-events-none absolute inset-0 rounded-[2.4rem] border border-white/40" />
+      <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-[linear-gradient(90deg,transparent,#c7ccd1,transparent)]" />
       <div className="relative z-10 space-y-6">{children}</div>
     </motion.div>
   )

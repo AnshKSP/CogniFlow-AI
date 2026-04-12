@@ -26,26 +26,29 @@ export default function EmotionArcChart({ arc }: EmotionArcChartProps) {
     .join(' ')
 
   return (
-    <div className="rounded-2xl border border-blue-300/45 bg-gradient-to-br from-white/90 via-blue-100/75 to-indigo-100/70 p-4 shadow-xl shadow-cyan-300/30">
-      <h3 className="mb-3 text-sm font-semibold text-slate-800">Emotional Arc</h3>
+    <div className="rounded-[2rem] border border-[#d8d1c5] bg-[linear-gradient(180deg,#faf6ef_0%,#eef2f5_100%)] p-5 shadow-[0_22px_50px_-40px_rgba(82,94,104,0.24)]">
+      <div className="mb-4">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Timeline</p>
+        <h3 className="mt-1 text-xl font-semibold text-slate-800">Emotional Arc</h3>
+      </div>
       {arc.length === 0 ? (
         <p className="text-xs text-slate-600">No emotional arc data yet.</p>
       ) : (
         <svg viewBox="0 0 100 100" className="h-48 w-full">
           <defs>
             <linearGradient id="arcStroke" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#38bdf8" />
-              <stop offset="50%" stopColor="#818cf8" />
-              <stop offset="100%" stopColor="#f472b6" />
+              <stop offset="0%" stopColor="#a8bacb" />
+              <stop offset="50%" stopColor="#c5b4aa" />
+              <stop offset="100%" stopColor="#b7cbbb" />
             </linearGradient>
             <linearGradient id="arcFill" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="rgba(129, 140, 248, 0.33)" />
-              <stop offset="100%" stopColor="rgba(129, 140, 248, 0.06)" />
+              <stop offset="0%" stopColor="rgba(173, 188, 201, 0.34)" />
+              <stop offset="100%" stopColor="rgba(173, 188, 201, 0.06)" />
             </linearGradient>
           </defs>
-          <line x1="5" y1="78" x2="95" y2="78" stroke="rgba(148,163,184,0.35)" strokeWidth="0.4" />
-          <line x1="5" y1="50" x2="95" y2="50" stroke="rgba(148,163,184,0.25)" strokeWidth="0.4" />
-          <line x1="5" y1="22" x2="95" y2="22" stroke="rgba(148,163,184,0.2)" strokeWidth="0.4" />
+          <line x1="5" y1="78" x2="95" y2="78" stroke="rgba(148,163,184,0.28)" strokeWidth="0.4" />
+          <line x1="5" y1="50" x2="95" y2="50" stroke="rgba(148,163,184,0.2)" strokeWidth="0.4" />
+          <line x1="5" y1="22" x2="95" y2="22" stroke="rgba(148,163,184,0.16)" strokeWidth="0.4" />
 
           {arc.length > 1 && (
             <>
@@ -64,7 +67,7 @@ export default function EmotionArcChart({ arc }: EmotionArcChartProps) {
                 cx={point.x}
                 cy={point.y}
                 r="2"
-                fill="#a5b4fc"
+                fill="#b8c6d2"
               />
             )
           })}

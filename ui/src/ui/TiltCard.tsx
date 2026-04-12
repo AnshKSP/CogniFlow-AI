@@ -23,7 +23,7 @@ export default function TiltCard({ children, className = '' }: TiltCardProps) {
       whileHover={{ scale: 1.012 }}
       transition={{ type: 'spring', stiffness: 180, damping: 16 }}
       style={{ transformStyle: 'preserve-3d' }}
-      className={`rounded-2xl border border-sky-300/45 bg-gradient-to-br from-white/88 via-sky-100/80 to-rose-100/70 shadow-xl shadow-sky-200/40 backdrop-blur-sm ${className}`}
+      className={`rounded-[1.8rem] border border-[#ddd7cb] bg-[linear-gradient(180deg,#fbf8f1_0%,#f3efe6_100%)] shadow-[0_18px_40px_-30px_rgba(82,94,104,0.3)] ${className}`}
     >
       {children}
     </motion.div>

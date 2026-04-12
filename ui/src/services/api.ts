@@ -30,9 +30,19 @@ export interface ChatResponse {
 export interface MovieRecommendation {
   title: string
   year?: number
+  release_date?: string
+  genres?: string[]
   genre?: string
   description?: string
   poster?: string
+  director?: string
+  cast?: string[]
+  runtime?: string
+  language?: string
+  certificate?: string
+  rating?: number
+  where_to_watch?: string[]
+  availability_note?: string
 }
 
 export interface RecommendationFilters {

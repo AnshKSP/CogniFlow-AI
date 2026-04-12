@@ -63,6 +63,33 @@ def root():
     return {"status": "Server running"}
 
 
+def _raise_backend_http_error(error: Exception):
+    if isinstance(error, HTTPException):
+        raise error
+
+    message = str(error)
+    if isinstance(error, (ValueError, NotImplementedError)):
+        raise HTTPException(status_code=400, detail=message)
+    lowered = message.lower()
+    service_markers = (
+        "local llm error:",
+        "llama runner process has terminated",
+        "connection refused",
+        "failed to connect",
+        "timed out",
+        "timeout",
+        "temporarily unavailable",
+        "service unavailable",
+    )
+    if any(marker in lowered for marker in service_markers):
+        raise HTTPException(status_code=503, detail=message)
+    raise HTTPException(status_code=500, detail=message)
+
+
+def _raise_llm_http_error(error: Exception):
+    _raise_backend_http_error(error)
+
+
 def _validate_email(email: str) -> str:
     normalized = email.strip().lower()
     if "@" not in normalized or "." not in normalized.split("@")[-1]:
@@ -166,7 +193,7 @@ def chat(request: ChatRequest):
         result = llm.generate(request.message)
         return ChatResponse(response=result)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        _raise_llm_http_error(e)
 @app.post("/upload-pdf")
 async def upload_pdf(file: UploadFile = File(...)):
     try:
@@ -204,7 +231,7 @@ async def upload_pdf(file: UploadFile = File(...)):
         return {"message": f"{file.filename} indexed successfully."}
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        _raise_backend_http_error(e)
 
 from pydantic import BaseModel
 
@@ -295,7 +322,7 @@ User Request:
         }
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        _raise_llm_http_error(e)
 
 @app.post("/upload-image")
 async def upload_image(
@@ -379,7 +406,7 @@ Instructions:
             raise ValueError("Invalid mode. Use 'index' or 'solve'.")
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        _raise_backend_http_error(e)
 
 
 @app.post("/clear-index")
@@ -392,7 +419,7 @@ def clear_index():
             "total_chunks": 0
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        _raise_backend_http_error(e)
 
 @app.get("/list-documents")
 def list_documents():
@@ -509,48 +536,51 @@ import os
 
 @app.post("/video/upload")
 async def upload_video(file: UploadFile = File(...)):
-    folder = "uploaded_videos"
-    os.makedirs(folder, exist_ok=True)
-    path = os.path.join(folder, file.filename)
+    try:
+        folder = "uploaded_videos"
+        os.makedirs(folder, exist_ok=True)
+        path = os.path.join(folder, file.filename)
 
-    content = await file.read()
-    with open(path, "wb") as f:
-        f.write(content)
+        content = await file.read()
+        with open(path, "wb") as f:
+            f.write(content)
 
-    result = video_pipeline.process_uploaded_video(path)
+        result = video_pipeline.process_uploaded_video(path)
 
-    dominant_mood = result.get("script_emotion", {}).get("dominant_mood", "calm")
-    intensity_level = result.get("audio_emotion", {}).get("intensity_level", "medium")
-    confidence = _safe_float(result.get("script_emotion", {}).get("confidence", 0.0), 0.0)
-    top_emotions = _normalize_top_emotions(result.get("script_emotion", {}).get("top_emotions", []))
-    dominance_gap = _safe_float(result.get("script_emotion", {}).get("dominance_gap", 0.0), 0.0)
-    recommendations = _recommend_for_mood(dominant_mood, intensity_level)
+        dominant_mood = result.get("script_emotion", {}).get("dominant_mood", "calm")
+        intensity_level = result.get("audio_emotion", {}).get("intensity_level", "medium")
+        confidence = _safe_float(result.get("script_emotion", {}).get("confidence", 0.0), 0.0)
+        top_emotions = _normalize_top_emotions(result.get("script_emotion", {}).get("top_emotions", []))
+        dominance_gap = _safe_float(result.get("script_emotion", {}).get("dominance_gap", 0.0), 0.0)
+        recommendations = _recommend_for_mood(dominant_mood, intensity_level)
 
-    return {
-        "dominant_mood": dominant_mood,
-        "intensity_level": intensity_level,
-        "confidence": confidence,
-        "top_emotions": top_emotions,
-        "dominance_gap": dominance_gap,
-        "emotional_arc": result.get("script_emotion", {}).get("emotional_arc", []),
-        "recommendations": recommendations,
-        "language_detected": result["transcript"]["language"],
-        "transcript_confidence": result["transcript"].get("confidence", None),
-        "transcript_preview": result["transcript"]["full_text"][:500],
-        "audio_emotion": {
-            "dominant_mood": result["audio_emotion"]["dominant_mood"],
-            "intensity_level": result["audio_emotion"].get("intensity_level", intensity_level),
-            "emotional_arc": result["audio_emotion"]["emotional_arc"]
-        },
-        "script_emotion": {
-            "emotion_label": result["script_emotion"].get("emotion_label", "neutral"),
-            "confidence": result["script_emotion"].get("confidence", confidence),
+        return {
+            "dominant_mood": dominant_mood,
+            "intensity_level": intensity_level,
+            "confidence": confidence,
             "top_emotions": top_emotions,
             "dominance_gap": dominance_gap,
-            "dominant_mood": result["script_emotion"]["dominant_mood"],
-            "emotional_arc": result["script_emotion"]["emotional_arc"]
+            "emotional_arc": result.get("script_emotion", {}).get("emotional_arc", []),
+            "recommendations": recommendations,
+            "language_detected": result["transcript"]["language"],
+            "transcript_confidence": result["transcript"].get("confidence", None),
+            "transcript_preview": result["transcript"]["full_text"][:500],
+            "audio_emotion": {
+                "dominant_mood": result["audio_emotion"]["dominant_mood"],
+                "intensity_level": result["audio_emotion"].get("intensity_level", intensity_level),
+                "emotional_arc": result["audio_emotion"]["emotional_arc"]
+            },
+            "script_emotion": {
+                "emotion_label": result["script_emotion"].get("emotion_label", "neutral"),
+                "confidence": result["script_emotion"].get("confidence", confidence),
+                "top_emotions": top_emotions,
+                "dominance_gap": dominance_gap,
+                "dominant_mood": result["script_emotion"]["dominant_mood"],
+                "emotional_arc": result["script_emotion"]["emotional_arc"]
+            }
         }
-    }
+    except Exception as e:
+        _raise_backend_http_error(e)
 
 
 @app.post("/video/upload-report")
@@ -590,46 +620,48 @@ async def upload_video_report(file: UploadFile = File(...)):
             }
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        _raise_llm_http_error(e)
 
 
 @app.post("/video/youtube")
 def youtube_video(url: str):
+    try:
+        result = video_pipeline.process_youtube(url)
 
-    result = video_pipeline.process_youtube(url)
+        dominant_mood = result.get("script_emotion", {}).get("dominant_mood", "calm")
+        intensity_level = result.get("audio_emotion", {}).get("intensity_level", "medium")
+        confidence = _safe_float(result.get("script_emotion", {}).get("confidence", 0.0), 0.0)
+        top_emotions = _normalize_top_emotions(result.get("script_emotion", {}).get("top_emotions", []))
+        dominance_gap = _safe_float(result.get("script_emotion", {}).get("dominance_gap", 0.0), 0.0)
+        recommendations = _recommend_for_mood(dominant_mood, intensity_level)
 
-    dominant_mood = result.get("script_emotion", {}).get("dominant_mood", "calm")
-    intensity_level = result.get("audio_emotion", {}).get("intensity_level", "medium")
-    confidence = _safe_float(result.get("script_emotion", {}).get("confidence", 0.0), 0.0)
-    top_emotions = _normalize_top_emotions(result.get("script_emotion", {}).get("top_emotions", []))
-    dominance_gap = _safe_float(result.get("script_emotion", {}).get("dominance_gap", 0.0), 0.0)
-    recommendations = _recommend_for_mood(dominant_mood, intensity_level)
-
-    return {
-        "dominant_mood": dominant_mood,
-        "intensity_level": intensity_level,
-        "confidence": confidence,
-        "top_emotions": top_emotions,
-        "dominance_gap": dominance_gap,
-        "emotional_arc": result.get("script_emotion", {}).get("emotional_arc", []),
-        "recommendations": recommendations,
-        "language_detected": result["transcript"]["language"],
-        "transcript_confidence": result["transcript"].get("confidence", None),
-        "transcript_preview": result["transcript"]["full_text"][:500],
-        "audio_emotion": {
-            "dominant_mood": result["audio_emotion"]["dominant_mood"],
-            "intensity_level": result["audio_emotion"].get("intensity_level", intensity_level),
-            "emotional_arc": result["audio_emotion"]["emotional_arc"]
-        },
-        "script_emotion": {
-            "emotion_label": result["script_emotion"].get("emotion_label", "neutral"),
-            "confidence": result["script_emotion"].get("confidence", confidence),
+        return {
+            "dominant_mood": dominant_mood,
+            "intensity_level": intensity_level,
+            "confidence": confidence,
             "top_emotions": top_emotions,
             "dominance_gap": dominance_gap,
-            "dominant_mood": result["script_emotion"]["dominant_mood"],
-            "emotional_arc": result["script_emotion"]["emotional_arc"]
+            "emotional_arc": result.get("script_emotion", {}).get("emotional_arc", []),
+            "recommendations": recommendations,
+            "language_detected": result["transcript"]["language"],
+            "transcript_confidence": result["transcript"].get("confidence", None),
+            "transcript_preview": result["transcript"]["full_text"][:500],
+            "audio_emotion": {
+                "dominant_mood": result["audio_emotion"]["dominant_mood"],
+                "intensity_level": result["audio_emotion"].get("intensity_level", intensity_level),
+                "emotional_arc": result["audio_emotion"]["emotional_arc"]
+            },
+            "script_emotion": {
+                "emotion_label": result["script_emotion"].get("emotion_label", "neutral"),
+                "confidence": result["script_emotion"].get("confidence", confidence),
+                "top_emotions": top_emotions,
+                "dominance_gap": dominance_gap,
+                "dominant_mood": result["script_emotion"]["dominant_mood"],
+                "emotional_arc": result["script_emotion"]["emotional_arc"]
+            }
         }
-    }
+    except Exception as e:
+        _raise_backend_http_error(e)
 
 
 @app.post("/video/youtube-report")
@@ -664,7 +696,7 @@ def youtube_video_report(url: str):
             }
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        _raise_llm_http_error(e)
 
 
 class ScriptAnalyzeRequest(BaseModel):
@@ -720,7 +752,7 @@ def analyze_script(request: ScriptAnalyzeRequest):
             "recommendations": recommendations
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        _raise_backend_http_error(e)
 
 
 @app.post("/script/upload-pdf")
@@ -794,7 +826,7 @@ async def upload_script_pdf(file: UploadFile = File(...)):
             "recommendations": recommendations
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        _raise_backend_http_error(e)
 
 
 @app.post("/script/upload-pdf-report")
@@ -853,7 +885,7 @@ async def upload_pdf_report(file: UploadFile = File(...)):
             }
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        _raise_backend_http_error(e)
 
 
 @app.post("/script/generate-report")
@@ -896,5 +928,5 @@ async def generate_script_report(data: dict = Body(...)):
             }
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        _raise_backend_http_error(e)
 

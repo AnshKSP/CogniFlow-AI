@@ -6,6 +6,6 @@ class APILLM(BaseLLM):
         self.api_key = api_key
 
     def generate(self, prompt: str) -> str:
-        raise RuntimeError(
+        raise NotImplementedError(
             "API LLM not implemented yet. Provide integration logic."
         )
