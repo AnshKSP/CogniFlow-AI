@@ -1,0 +1,66 @@
+{
+  "root": {
+    "status": 200,
+    "extra": null
+  },
+  "recommend": {
+    "status": 200,
+    "extra": null
+  },
+  "script_analyze": {
+    "status": 200,
+    "extra": null
+  },
+  "script_generate_report": {
+    "status": 200,
+    "extra": "pdf"
+  },
+  "script_upload_pdf": {
+    "status": 200,
+    "extra": null
+  },
+  "script_upload_pdf_report": {
+    "status": 200,
+    "extra": "pdf"
+  },
+  "rag_upload_pdf": {
+    "status": 200,
+    "extra": null
+  },
+  "rag_query_strict": {
+    "status": 200,
+    "extra": null
+  },
+  "rag_query_solve": {
+    "status": 200,
+    "extra": null
+  },
+  "rag_query_local_failure": {
+    "status": 200,
+    "extra": null
+  },
+  "image_upload_index": {
+    "status": 200,
+    "extra": null
+  },
+  "image_upload_solve": {
+    "status": 200,
+    "extra": null
+  },
+  "video_upload": {
+    "status": 200,
+    "extra": null
+  },
+  "video_upload_report": {
+    "status": 200,
+    "extra": "pdf"
+  },
+  "video_youtube": {
+    "status": 200,
+    "extra": null
+  },
+  "video_youtube_report": {
+    "status": 200,
+    "extra": "pdf"
+  }
+}

@@ -1,0 +1,61 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <style>
+      .title{font:700 46px Segoe UI,Arial,sans-serif;fill:#0f172a}
+      .lane{font:700 24px Segoe UI,Arial,sans-serif;fill:#0f172a}
+      .boxText{font:600 18px Segoe UI,Arial,sans-serif;fill:#0f172a}
+      .box{stroke:#94a3b8;stroke-width:2}
+      .arrow{stroke:#334155;stroke-width:2.5;fill:none;marker-end:url(#m)}
+    </style>
+    <marker id="m" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 z" fill="#334155"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1600" height="900" fill="#f8fafc"/>
+  <text x="70" y="90" class="title">Slide 5: End-to-End Workflow (3 Entry Paths)</text>
+
+  <line x1="70" y1="160" x2="1530" y2="160" stroke="#cbd5e1" stroke-width="2"/>
+
+  <text x="70" y="215" class="lane">Path 1: PDF / Script</text>
+  <rect x="70" y="245" rx="14" ry="14" width="220" height="70" class="box" fill="#dbeafe"/>
+  <text x="180" y="287" text-anchor="middle" class="boxText">PDF / Script Input</text>
+  <rect x="360" y="245" rx="14" ry="14" width="280" height="70" class="box" fill="#e0e7ff"/>
+  <text x="500" y="287" text-anchor="middle" class="boxText">Extract + Clean Text</text>
+  <rect x="710" y="245" rx="14" ry="14" width="300" height="70" class="box" fill="#dcfce7"/>
+  <text x="860" y="287" text-anchor="middle" class="boxText">Script Analyzer Service</text>
+  <rect x="1080" y="245" rx="14" ry="14" width="420" height="70" class="box" fill="#fee2e2"/>
+  <text x="1290" y="287" text-anchor="middle" class="boxText">Emotion Output + Report + Recommendations</text>
+
+  <text x="70" y="420" class="lane">Path 2: Video Upload</text>
+  <rect x="70" y="450" rx="14" ry="14" width="220" height="70" class="box" fill="#fde68a"/>
+  <text x="180" y="492" text-anchor="middle" class="boxText">Video Upload</text>
+  <rect x="360" y="450" rx="14" ry="14" width="280" height="70" class="box" fill="#fef3c7"/>
+  <text x="500" y="492" text-anchor="middle" class="boxText">Audio + Transcript</text>
+  <rect x="710" y="450" rx="14" ry="14" width="300" height="70" class="box" fill="#dcfce7"/>
+  <text x="860" y="492" text-anchor="middle" class="boxText">Video Pipeline Service</text>
+  <rect x="1080" y="450" rx="14" ry="14" width="420" height="70" class="box" fill="#fee2e2"/>
+  <text x="1290" y="492" text-anchor="middle" class="boxText">Mood + Intensity + Report + Recs</text>
+
+  <text x="70" y="625" class="lane">Path 3: YouTube URL</text>
+  <rect x="70" y="655" rx="14" ry="14" width="220" height="70" class="box" fill="#bae6fd"/>
+  <text x="180" y="697" text-anchor="middle" class="boxText">YouTube URL</text>
+  <rect x="360" y="655" rx="14" ry="14" width="280" height="70" class="box" fill="#cffafe"/>
+  <text x="500" y="697" text-anchor="middle" class="boxText">Download + Audio + STT</text>
+  <rect x="710" y="655" rx="14" ry="14" width="300" height="70" class="box" fill="#dcfce7"/>
+  <text x="860" y="697" text-anchor="middle" class="boxText">Video Pipeline Service</text>
+  <rect x="1080" y="655" rx="14" ry="14" width="420" height="70" class="box" fill="#fee2e2"/>
+  <text x="1290" y="697" text-anchor="middle" class="boxText">Mood + Intensity + Report + Recs</text>
+
+  <path d="M290 280 L360 280" class="arrow"/>
+  <path d="M640 280 L710 280" class="arrow"/>
+  <path d="M1010 280 L1080 280" class="arrow"/>
+
+  <path d="M290 485 L360 485" class="arrow"/>
+  <path d="M640 485 L710 485" class="arrow"/>
+  <path d="M1010 485 L1080 485" class="arrow"/>
+
+  <path d="M290 690 L360 690" class="arrow"/>
+  <path d="M640 690 L710 690" class="arrow"/>
+  <path d="M1010 690 L1080 690" class="arrow"/>
+</svg>

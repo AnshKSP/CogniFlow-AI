@@ -9,13 +9,13 @@ interface PrismaticSceneProps {
 }
 
 const themeGradients: Record<SceneTheme, string[]> = {
-  ocean: ['from-cyan-200/65 to-blue-300/45', 'from-sky-200/60 to-indigo-200/45', 'from-blue-200/55 to-cyan-300/45'],
-  sunset: ['from-orange-200/65 to-pink-300/45', 'from-amber-200/60 to-rose-300/45', 'from-rose-200/55 to-orange-300/45'],
-  neon: ['from-fuchsia-200/65 to-violet-300/45', 'from-cyan-200/60 to-purple-300/45', 'from-indigo-200/60 to-fuchsia-300/45'],
-  forest: ['from-emerald-200/65 to-teal-300/45', 'from-lime-200/60 to-emerald-300/45', 'from-green-200/55 to-cyan-300/45'],
-  cosmic: ['from-violet-200/65 to-indigo-300/45', 'from-fuchsia-200/60 to-blue-300/45', 'from-cyan-200/55 to-violet-300/45'],
-  candy: ['from-pink-200/65 to-cyan-300/45', 'from-rose-200/60 to-violet-300/45', 'from-fuchsia-200/55 to-blue-300/45'],
-  aurora: ['from-cyan-200/65 to-emerald-300/45', 'from-purple-200/60 to-blue-300/45', 'from-teal-200/60 to-violet-300/45']
+  ocean: ['from-[#d9e4ee]/85 to-[#c7d5e1]/70', 'from-[#e6edf2]/82 to-[#d1dbe4]/72', 'from-[#d5e0ea]/78 to-[#c0cedc]/68'],
+  sunset: ['from-[#dbe7df]/85 to-[#c6d7cf]/72', 'from-[#e7efe8]/82 to-[#cfded4]/70', 'from-[#d4e2d9]/78 to-[#bfcdc4]/68'],
+  neon: ['from-[#edd6d1]/85 to-[#e2c2bc]/72', 'from-[#f3e3df]/82 to-[#e7ccc5]/70', 'from-[#ead5cf]/78 to-[#dcb9b2]/68'],
+  forest: ['from-[#d9e1d3]/85 to-[#c5d0bf]/72', 'from-[#e8ede3]/82 to-[#d3dbc9]/70', 'from-[#d6ddd0]/78 to-[#c0cbb9]/68'],
+  cosmic: ['from-[#d8e0e8]/85 to-[#becad8]/72', 'from-[#e4e9ef]/82 to-[#ccd6e1]/70', 'from-[#d4dce4]/78 to-[#bfc9d3]/68'],
+  candy: ['from-[#efe2d0]/85 to-[#e4ceb3]/72', 'from-[#f6ecdf]/82 to-[#ead9c4]/70', 'from-[#ecdcc9]/78 to-[#e1c9ad]/68'],
+  aurora: ['from-[#e2e1ef]/85 to-[#cbc8e1]/72', 'from-[#ecebf5]/82 to-[#d7d4e8]/70', 'from-[#dfdeec]/78 to-[#c6c4db]/68']
 }
 
 const blobs = [
@@ -36,11 +36,11 @@ export default function PrismaticScene({ theme, mouseX, mouseY }: PrismaticScene
   const gradients = themeGradients[theme]
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[2rem]">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_14%_18%,rgba(255,255,255,0.88),transparent_42%),radial-gradient(circle_at_88%_20%,rgba(255,255,255,0.55),transparent_34%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_14%_18%,rgba(255,255,255,0.72),transparent_42%),radial-gradient(circle_at_88%_20%,rgba(255,255,255,0.36),transparent_34%)]" />
       {blobs.map((blob, index) => (
         <motion.div
           key={`${blob.left}-${blob.top}-${index}`}
-          className={`absolute rounded-[2rem] border border-white/60 bg-gradient-to-br ${gradients[index % gradients.length]}`}
+          className={`absolute rounded-[2rem] border border-white/50 bg-gradient-to-br ${gradients[index % gradients.length]}`}
           style={{
             left: blob.left,
             top: blob.top,
@@ -81,11 +81,11 @@ export default function PrismaticScene({ theme, mouseX, mouseY }: PrismaticScene
         />
       ))}
       <motion.div
-        className="absolute -bottom-[4.5rem] left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-cyan-200/45 blur-3xl"
-        animate={{ scale: [1, 1.2, 1], opacity: [0.25, 0.55, 0.25] }}
+        className="absolute -bottom-[4.5rem] left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-white/35 blur-3xl"
+        animate={{ scale: [1, 1.12, 1], opacity: [0.18, 0.36, 0.18] }}
         transition={{ duration: 8.5, repeat: Infinity, ease: 'easeInOut' }}
       />
-      <div className="absolute inset-0 bg-[linear-gradient(120deg,rgba(255,255,255,0.28),transparent_35%,rgba(255,255,255,0.18)_70%,transparent)]" />
+      <div className="absolute inset-0 bg-[linear-gradient(120deg,rgba(255,255,255,0.18),transparent_35%,rgba(255,255,255,0.08)_70%,transparent)]" />
     </div>
   )
 }

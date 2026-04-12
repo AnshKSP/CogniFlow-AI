@@ -17,21 +17,21 @@ export default function EmotionSummaryCard({ result }: EmotionSummaryCardProps) 
         <GlowBadge label={result.dominant_mood} mood={result.dominant_mood} />
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <div className="rounded-xl border border-white/60 bg-white/65 p-3">
+        <div className="rounded-[1.3rem] border border-[#d8d2c7] bg-[#faf6ee] p-3">
           <p className="text-xs text-slate-500">Dominant Mood</p>
           <p className="mt-1 text-lg font-semibold capitalize text-slate-800">{result.dominant_mood}</p>
         </div>
-        <div className="rounded-xl border border-white/60 bg-white/65 p-3">
+        <div className="rounded-[1.3rem] border border-[#d8d2c7] bg-[#faf6ee] p-3">
           <p className="text-xs text-slate-500">Intensity</p>
           <p className="mt-1 text-lg font-semibold capitalize text-slate-800">{result.intensity_level}</p>
         </div>
-        <div className="rounded-xl border border-white/60 bg-white/65 p-3">
+        <div className="rounded-[1.3rem] border border-[#d8d2c7] bg-[#faf6ee] p-3">
           <p className="text-xs text-slate-500">Confidence</p>
           <p className="mt-1 text-lg font-semibold text-slate-800">{result.confidence}%</p>
         </div>
       </div>
       {(topEmotions.length > 0 || dominanceGap > 0) && (
-        <div className="mt-3 rounded-xl border border-white/60 bg-white/65 p-3 text-xs text-slate-600">
+        <div className="mt-3 rounded-[1.3rem] border border-[#d8d2c7] bg-[#f7f2e9] p-3 text-xs text-slate-600">
           {topEmotions.length > 0 && (
             <p>
               <span className="font-semibold text-slate-700">Top Emotions:</span>{' '}

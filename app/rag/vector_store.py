@@ -12,12 +12,15 @@ class FAISSStore:
         self.metadata.extend(metadatas)
 
     def search(self, query_embedding, top_k: int = 4):
+        if not self.metadata or self.index.ntotal == 0:
+            return []
+
         query_embedding = np.array([query_embedding]).astype("float32")
         distances, indices = self.index.search(query_embedding, top_k)
 
         results = []
         for idx in indices[0]:
-            if idx < len(self.metadata):
+            if 0 <= idx < len(self.metadata):
                 results.append(self.metadata[idx])
 
         return results

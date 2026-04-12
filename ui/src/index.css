@@ -3,6 +3,11 @@
 
 :root {
   color-scheme: light;
+  --paper: #f8f5ee;
+  --paper-strong: #f2eee3;
+  --ink: #20303a;
+  --muted: #60707c;
+  --line: rgba(96, 112, 124, 0.2);
 }
 
 * {
@@ -18,12 +23,12 @@ body,
 body {
   margin: 0;
   font-family: 'Space Grotesk', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  color: #1e293b;
+  color: var(--ink);
   background:
-    radial-gradient(circle at 8% 14%, rgba(56, 189, 248, 0.3), transparent 32%),
-    radial-gradient(circle at 88% 18%, rgba(244, 114, 182, 0.26), transparent 30%),
-    radial-gradient(circle at 56% 86%, rgba(251, 191, 36, 0.2), transparent 34%),
-    linear-gradient(145deg, #eff6ff 0%, #eef2ff 42%, #fdf2f8 100%);
+    radial-gradient(circle at 12% 16%, rgba(167, 196, 224, 0.2), transparent 30%),
+    radial-gradient(circle at 88% 20%, rgba(217, 189, 176, 0.16), transparent 32%),
+    radial-gradient(circle at 54% 84%, rgba(194, 213, 202, 0.18), transparent 30%),
+    linear-gradient(150deg, #f6f3ec 0%, #f8f6f1 48%, #f3efe7 100%);
 }
 
 /* Custom scrollbar styles */
@@ -33,16 +38,16 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(148, 163, 184, 0.2);
+  background: rgba(96, 112, 124, 0.12);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(56, 189, 248, 0.5);
+  background: rgba(96, 112, 124, 0.28);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(14, 165, 233, 0.75);
+  background: rgba(96, 112, 124, 0.42);
 }
 
 /* Animation utilities */
@@ -68,7 +73,7 @@ body {
 
 /* Gradient text */
 .gradient-text {
-  background: linear-gradient(135deg, #0ea5e9 0%, #d946ef 55%, #f97316 100%);
+  background: linear-gradient(135deg, #516f8a 0%, #a05f57 58%, #c48a5a 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -93,8 +98,8 @@ button:not(:disabled):hover,
 a:hover,
 label.cursor-pointer:hover,
 select:hover {
-  box-shadow: 0 14px 28px -22px rgba(14, 165, 233, 0.65);
-  filter: saturate(1.08);
+  box-shadow: 0 14px 28px -22px rgba(81, 111, 138, 0.28);
+  filter: saturate(1.03);
 }
 
 button:not(:disabled):active,
@@ -111,6 +116,6 @@ a:focus-visible,
 label.cursor-pointer:focus-visible {
   outline: none;
   box-shadow:
-    0 0 0 2px rgba(255, 255, 255, 0.95),
-    0 0 0 4px rgba(56, 189, 248, 0.5);
+    0 0 0 2px rgba(248, 245, 238, 0.98),
+    0 0 0 4px rgba(81, 111, 138, 0.35);
 }

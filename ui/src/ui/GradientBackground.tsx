@@ -7,13 +7,12 @@ interface GradientBackgroundProps {
 
 export default function GradientBackground({ children }: GradientBackgroundProps) {
   return (
-    <div className="relative min-h-screen bg-gradient-to-br from-sky-100 via-indigo-100 to-rose-100 text-slate-800">
+    <div className="relative min-h-screen bg-[linear-gradient(145deg,#f8f5ee_0%,#f6f2ea_52%,#f2eee5_100%)] text-slate-800">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -top-32 -left-20 h-[24rem] w-[24rem] rounded-full bg-cyan-300/40 blur-3xl" />
-        <div className="absolute top-[15%] -right-24 h-[28rem] w-[28rem] rounded-full bg-fuchsia-300/30 blur-3xl" />
-        <div className="absolute bottom-0 left-[28%] h-[22rem] w-[22rem] rounded-full bg-amber-300/30 blur-3xl" />
-        <div className="absolute bottom-[20%] left-[60%] h-[20rem] w-[20rem] rounded-full bg-emerald-300/25 blur-3xl" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_12%_16%,rgba(255,255,255,0.9),transparent_26%),radial-gradient(circle_at_88%_8%,rgba(255,255,255,0.65),transparent_22%),radial-gradient(circle_at_55%_90%,rgba(255,255,255,0.55),transparent_28%)]" />
+        <div className="absolute -top-28 left-[4%] h-[22rem] w-[22rem] rounded-full bg-[#dce8f1]/70 blur-3xl" />
+        <div className="absolute right-[2%] top-[12%] h-[20rem] w-[20rem] rounded-full bg-[#e8d5cc]/60 blur-3xl" />
+        <div className="absolute bottom-[8%] left-[22%] h-[18rem] w-[18rem] rounded-full bg-[#dce5d8]/55 blur-3xl" />
+        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.26)_0,rgba(255,255,255,0.26)_1px,transparent_1px,transparent_120px),linear-gradient(0deg,rgba(255,255,255,0.18)_0,rgba(255,255,255,0.18)_1px,transparent_1px,transparent_120px)] opacity-35" />
         <Floating3DObjects />
       </div>
       <div className="relative z-10">{children}</div>
